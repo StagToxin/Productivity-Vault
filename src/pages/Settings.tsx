@@ -4,7 +4,7 @@ import { ACCENTS, DARK_BGS, LIGHT_BGS, seedSample, updatePrefs } from '../lib/ac
 import { db, table } from '../lib/db';
 import { APP_VERSION, canInstall, checkDesktopUpdate, isIos, isStandalone, isTauri, notifPermission, notify, onInstallable, promptInstall, requestNotif, type NotifPermission } from '../lib/platform';
 import { useData } from '../lib/store';
-import { getSupaConfig, setSupaConfig } from '../lib/supabase';
+import { explainSupaError, getSupaConfig, hasSupaOverride, setSupaConfig, testSupaConfig } from '../lib/supabase';
 import { signIn, signOut, signUp, syncNow, useSyncStatus, wipeLocal } from '../lib/sync';
 import { SYNC_TABLES, type Lang, type ThemeMode } from '../lib/types';
 
@@ -177,7 +177,7 @@ function InstallRow() {
 }
 
 function SyncSection() {
-  const { t } = useData();
+  const { t, prefs } = useData();
   const st = useSyncStatus();
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
@@ -189,7 +189,7 @@ function SyncSection() {
     try {
       await f();
     } catch (e) {
-      toast('⚠️ ' + (e instanceof Error ? e.message : String(e)), undefined, 6000);
+      toast('⚠️ ' + explainSupaError(e instanceof Error ? e.message : String(e), prefs.lang), undefined, 8000);
     } finally {
       setBusy(false);
     }
@@ -209,7 +209,7 @@ function SyncSection() {
                 <span className={'dot ' + st.state} style={{ display: 'inline-block', marginRight: 6 }} />
                 {t(`sync_${st.state}` as 'sync_idle')}
                 {st.lastSync && ` · ${t('s_lastSync')}: ${new Date(st.lastSync).toLocaleTimeString()}`}
-                {st.error && <span className="bad"> · {st.error}</span>}
+                {st.error && <span className="bad"> · {explainSupaError(st.error, prefs.lang)}</span>}
               </div>
             </div>
             <button className="btn sm" disabled={st.state === 'syncing'} onClick={() => syncNow()}>
@@ -267,27 +267,57 @@ function SyncSection() {
 }
 
 function AdvancedSupa() {
-  const { t } = useData();
+  const { t, prefs } = useData();
   const cur = getSupaConfig();
+  const manual = hasSupaOverride();
   const [url, setUrl] = useState(cur?.url ?? '');
   const [key, setKey] = useState(cur?.anonKey ?? '');
+  const [testing, setTesting] = useState(false);
+  const test = async () => {
+    setTesting(true);
+    const r = await testSupaConfig({ url, anonKey: key });
+    setTesting(false);
+    if (r.ok) toast(t('s_connOk'));
+    else toast('⚠️ ' + explainSupaError(r.error, prefs.lang) + (r.error !== explainSupaError(r.error, prefs.lang) ? ` (${r.error})` : ''), undefined, 9000);
+  };
   return (
     <div style={{ marginTop: 10 }}>
+      {cur && (
+        <p className="small muted" style={{ wordBreak: 'break-all' }}>
+          {t('s_supaUsing')}: <b>{cur.url}</b> ({manual ? t('s_supaManual') : t('s_supaBuiltin')})
+        </p>
+      )}
       <Field label={t('s_supaUrl')}>
         <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://xxxx.supabase.co" />
       </Field>
       <Field label={t('s_supaKey')}>
         <input className="input" value={key} onChange={(e) => setKey(e.target.value)} />
       </Field>
-      <button
-        className="btn sm"
-        onClick={() => {
-          setSupaConfig(url && key ? { url: url.trim(), anonKey: key.trim() } : null);
-          location.reload();
-        }}
-      >
-        {t('save')}
-      </button>
+      <div className="actions" style={{ justifyContent: 'flex-start' }}>
+        <button className="btn sm" disabled={testing || !url || !key} onClick={test}>
+          {testing ? '…' : '🔌 ' + t('s_testConn')}
+        </button>
+        <button
+          className="btn sm primary"
+          onClick={() => {
+            setSupaConfig(url && key ? { url, anonKey: key } : null);
+            location.reload();
+          }}
+        >
+          {t('save')}
+        </button>
+        {manual && (
+          <button
+            className="btn sm"
+            onClick={() => {
+              setSupaConfig(null);
+              location.reload();
+            }}
+          >
+            {t('s_useDefault')}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
