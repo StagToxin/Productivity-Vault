@@ -183,7 +183,7 @@ function Performance() {
         ◆ {t('perf_overdue')} ({overdue.length})
       </div>
       {overdue.length === 0 ? (
-        <div className="small bad">{t('perf_noOverdue')}</div>
+        <div className="small ok-green">{t('perf_noOverdue')}</div>
       ) : (
         overdue.slice(0, 5).map((x) => (
           <div key={x.id} className="small bad" style={{ paddingLeft: 8 }}>

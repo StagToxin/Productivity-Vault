@@ -4,7 +4,7 @@ Notion "Productivity Vault" şablonundan esinlenen, **offline çalışan** ve **
 
 | Platform | Nasıl çalışır | Güncelleme |
 |---|---|---|
-| Windows / macOS / Linux | Gerçek kurulum dosyası (Tauri, ~10 MB) | Açılışta kendisi kontrol eder, tek tıkla günceller |
+| Windows / macOS / Linux | Gerçek kurulum dosyası (Tauri, ~3–8 MB) | Açılışta kendisi kontrol eder, tek tıkla günceller |
 | Android | Chrome → "Uygulamayı yükle" (PWA) | Otomatik, "Yeni sürüm hazır → Güncelle" |
 | iPhone / iPad | Safari → Paylaş → "Ana Ekrana Ekle" (PWA) | Otomatik |
 
