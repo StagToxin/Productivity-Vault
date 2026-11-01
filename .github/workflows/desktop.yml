@@ -1,0 +1,72 @@
+# "v1.2.3" gibi bir etiket push'landığında Windows / macOS / Linux kurulum dosyalarını derler,
+# GitHub Release'e yükler ve otomatik güncelleyicinin okuduğu latest.json'u yayınlar.
+name: Masaüstü sürümü
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ''
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Linux bağımlılıkları
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_REPO: ${{ github.repository }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Productivity Vault ${{ github.ref_name }}'
+          releaseBody: |
+            ## İndir
+            - **Windows:** `Productivity.Vault_..._x64-setup.exe` dosyasını indir ve çalıştır.
+            - **macOS:** `.dmg` dosyasını indir, uygulamayı Applications klasörüne sürükle.
+            - **Linux:** `.AppImage` veya `.deb`.
+            - **iPhone / Android:** web adresini aç → "Ana ekrana ekle".
+
+            Kurulu uygulamalar bu sürümü kendiliğinden bulur ve güncellemeyi önerir.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
