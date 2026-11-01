@@ -1,5 +1,7 @@
 // Uygulama açıkken (veya masaüstünde arka planda) çalışan hatırlatıcı zamanlayıcı.
 import { useEffect, useRef } from 'react';
+import { hmToMin } from './dates';
+import { isScheduled } from './logic';
 import { notify } from './platform';
 import type { AppData } from './store';
 
@@ -18,6 +20,8 @@ function markSent(s: Set<string>, key: string) {
   localStorage.setItem(SENT_KEY, JSON.stringify([...s].slice(-300)));
 }
 
+// Uygulama geç açılırsa sabahki tüm hatırlatmalar birden gelmesin: yalnızca son 60 dk içindekiler
+const fresh = (now: string, hm: string) => now >= hm && hmToMin(now) - hmToMin(hm) <= 60;
 const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
 export function useReminders(data: AppData) {
@@ -33,14 +37,33 @@ export function useReminders(data: AppData) {
       const sent = sentSet();
       const t = d.t;
 
-      // Alışkanlık hatırlatıcıları — saati geçtiyse ve bugün yapılmadıysa bir kez
+      // Alışkanlık hatırlatıcıları — saati geldiyse ve yapılmadıysa bir kez (bölümlüde her bölüm için)
       for (const h of d.habits) {
-        if (h.archived || !h.reminderTime || time < h.reminderTime) continue;
+        if (h.archived || !isScheduled(h, d.today)) continue;
+        const day = d.idxOf(h.id).get(d.today);
+        if (h.slots?.length) {
+          for (const sl of h.slots) {
+            if (!sl.time || !fresh(time, sl.time)) continue;
+            const key = `h:${h.id}:${d.today}:${sl.id}`;
+            if (sent.has(key)) continue;
+            markSent(sent, key);
+            if (!day?.slots.has(sl.id)) void notify(`${h.icon} ${h.name} · ${sl.name}`, `⏰ ${sl.time}`);
+          }
+          continue;
+        }
+        if (!h.reminderTime || !fresh(time, h.reminderTime)) continue;
         const key = `h:${h.id}:${d.today}`;
         if (sent.has(key)) continue;
-        const done = d.logs.some((l) => l.habitId === h.id && l.date === d.today && l.done);
         markSent(sent, key);
-        if (!done) void notify(`${h.icon} ${h.name}`, t('not_completed'));
+        if (!day?.complete) void notify(`${h.icon} ${h.name}`, t('not_completed'));
+      }
+      // Görevler: saatli görev başlarken
+      for (const task of d.tasks) {
+        if (!task.dueTime || task.dueDate !== d.today || task.status === 'done' || !fresh(time, task.dueTime)) continue;
+        const key = `tt:${task.id}:${task.dueDate}:${task.dueTime}`;
+        if (sent.has(key)) continue;
+        markSent(sent, key);
+        void notify(`📌 ${task.title}`, `⏰ ${task.dueTime}`);
       }
       // Görev hatırlatıcıları
       for (const task of d.tasks) {

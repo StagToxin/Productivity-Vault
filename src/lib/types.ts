@@ -9,22 +9,34 @@ export interface SyncFields {
   dirty: 0 | 1;
 }
 
+/** Günde birden fazla onaylanan alışkanlıkların bölümleri (ör. 5 vakit namaz, 3 öğün, 8 bardak su). */
+export interface HabitSlot {
+  id: string;
+  name: string;
+  time?: string; // "HH:MM" — planlanan saat (takvimde ve hatırlatmada kullanılır)
+}
+
 export interface Habit extends SyncFields {
   name: string;
   icon: string; // emoji
   color: string; // hex
   weeklyTarget: number; // 1..7 — haftada kaç gün
   reminderTime?: string; // "HH:MM"
+  slots?: HabitSlot[]; // doluysa gün, tüm bölümler onaylanınca tamamlanır
+  days?: number[]; // belirli günler (0=Pzt … 6=Paz). Doluysa haftalık hedef = gün sayısı
   archived: 0 | 1;
   order: number;
   createdAt: number;
 }
 
-// id = `${habitId}_${date}` → iki cihaz aynı günü işaretlerse aynı kayıt olur, çakışma çıkmaz.
+// id = `${habitId}_${date}` (bölümlü ise `${habitId}_${date}_${slotId}`)
+// → iki cihaz aynı günü/bölümü işaretlerse aynı kayıt olur; farklı bölümler birbirini ezmez.
 export interface HabitLog extends SyncFields {
   habitId: string;
   date: string; // YYYY-MM-DD
+  slotId?: string;
   done: 0 | 1;
+  at?: number; // onaylandığı an (ms) — geçmişte "saat kaçta yapıldı" için
   minutes: number; // pomodoro'dan gelen süre
 }
 
@@ -37,6 +49,8 @@ export interface Task extends SyncFields {
   projectId?: string;
   dueDate?: string; // YYYY-MM-DD
   reminderAt?: string; // ISO local "YYYY-MM-DDTHH:MM"
+  dueTime?: string; // "HH:MM" — takvimin saat görünümünde yerleşim
+  duration?: number; // dakika
   status: TaskStatus;
   priority: Priority;
   doneAt?: number;
@@ -84,6 +98,8 @@ export type WidgetId =
 export interface Prefs extends SyncFields {
   theme: ThemeMode;
   accent: string;
+  bgDark: string; // gece teması zemin rengi
+  bgLight: string; // gündüz teması zemin rengi
   lang: Lang;
   dailyGoalXp: number;
   focusMinutes: number;

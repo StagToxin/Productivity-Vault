@@ -81,3 +81,22 @@ export function weekdayIndex(key: string, monday = true): number {
   const dow = fromKey(key).getDay();
   return monday ? (dow + 6) % 7 : dow;
 }
+
+export function hmToMin(hm: string): number {
+  const [h, m] = hm.split(':').map(Number);
+  return h * 60 + (m || 0);
+}
+
+export function minToHm(min: number): string {
+  const m = Math.max(0, Math.min(24 * 60 - 1, Math.round(min)));
+  return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+}
+
+export function timeOfTs(ts: number): string {
+  const d = new Date(ts);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function keyOfTs(ts: number): string {
+  return toKey(new Date(ts));
+}

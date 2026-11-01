@@ -14,15 +14,18 @@ Arkadaşın için basit anlatım: **[KURULUM.md](KURULUM.md)**
 
 ## Özellikler
 
-- **Alışkanlıklar** — haftalık hedef (haftada 1–7 gün), aylık mini takvim, gün×hafta ızgarası (geçmiş günlere tıklayarak işaretleme), gün/hafta bazlı seri + maksimum seri, hatırlatma saati, arşiv, renk & emoji
+- **Bölümlü alışkanlıklar** — günde birkaç kez onaylanan alışkanlıklar (5 vakit namaz, 3 öğün, 8 bardak su, ilaç hazır şablonları); her bölümün planlanan saati ve onaylandığı saat kaydedilir, saatinde bildirim gelir
+- **Geçmiş** — alışkanlık detayında yıl yıl ısı haritası, aylık başarı %, bölüm başına başarı ve ortalama saat, tarih+saatli kayıt listesi; kartlarda geçmiş aylara/haftalara gezinme
+- **Kaçırılanlar** — planlı olup yapılmayan gün/bölüm/haftalar tarih ve planlanan saatleriyle; "Telafi et" ile geç olarak işaretlenir
+- **Alışkanlıklar** — haftalık hedef (haftada 1–7 gün) veya belirli günler (Pzt/Çar/Cum…), aylık mini takvim, gün×hafta ızgarası (geçmiş günlere tıklayarak işaretleme), gün/hafta bazlı seri + maksimum seri, hatırlatma saati, arşiv, renk & emoji
 - **Duolingo tarzı seri** — günlük XP hedefi, 🔥 günlük seri, her 7 günde 1 🧊 seri dondurma (en fazla 2, kaçırılan günde otomatik harcanır), 3/7/14/30/50/100… gün kutlamaları, akşam "serin tehlikede" bildirimi
 - **Oyunlaştırma** — XP (alışkanlık +10, görev +10/15/25 önceliğe göre, odak 5 dk başına +2), seviyeler, 13 rozet
 - **Görevler** — Bugün / Dün / Gecikmiş / Yaklaşan / Projesiz / Gelen kutusu / Tamamlanan sekmeleri, öncelik, durum, hatırlatıcı
 - **Projeler** — ilgili/tamamlanan görev sayısı, ilerleme çubuğu, "X gün kaldı / gecikti"
-- **Takvim** — haftalık & aylık görünüm, görevler + alışkanlık noktaları, güne tıklayarak görev ekleme
+- **Takvim** — gün / hafta / saatli hafta / ay / yıl görünümleri; saatli görünümde görevler (saat + süre), alışkanlık bölümleri, odak oturumları ve "şu an" çizgisi; boş saate tıklayınca o saate görev eklenir
 - **Pomodoro** — odak/kısa/uzun mola, alışkanlığa veya göreve bağlama (süre alışkanlığa yazılır), sayfa değişse de devam eder
 - **İstatistik & grafikler** — 30 günlük XP, alışkanlık başarı oranı, haftanın günleri, günlük odak, haftalık görev, yıllık ısı haritası, rozetler
-- **Kişiselleştirme** — Gece / Gündüz / Sistem / Saate göre tema, vurgu rengi, sürükle-bırak pano (gizle/daralt), TR/EN, hafta başlangıcı, gece kuşları için gün bitiş saati
+- **Kişiselleştirme** — Gece / Gündüz / Sistem / Saate göre tema, gece ve gündüz için ayrı tema (zemin) rengi + özel renk, vurgu rengi, sürükle-bırak pano (gizle/daralt), TR/EN, hafta başlangıcı, gece kuşları için gün bitiş saati
 - **Veri** — JSON yedek indir / geri yükle
 
 ## Mimari

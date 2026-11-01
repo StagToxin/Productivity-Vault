@@ -13,20 +13,20 @@ const tip = {
 };
 
 export default function StatsPage() {
-  const { t, today, xpDay, xp, level, streak, habits, logs, tasks, focus, prefs } = useData();
+  const { t, today, xpDay, xp, level, streak, habits, logs, tasks, focus, prefs, idxOf } = useData();
   const dd = (k: string) => `${fromKey(k).getDate()}/${fromKey(k).getMonth() + 1}`;
 
   const xp30 = useMemo(() => range(addDays(today, -29), today).map((k) => ({ d: dd(k), xp: xpDay.get(k) ?? 0 })), [xpDay, today]);
   const active = habits.filter((h) => !h.archived);
   const perHabit = useMemo(
-    () => active.map((h) => ({ name: `${h.icon} ${h.name}`, rate: Math.round(habitStats(h, logs, today, prefs.weekStartsMonday).rate30 * 100), color: h.color })),
-    [active, logs, today, prefs.weekStartsMonday],
+    () => active.map((h) => ({ name: `${h.icon} ${h.name}`, rate: Math.round(habitStats(h, idxOf(h.id), today, prefs.weekStartsMonday).rate30 * 100), color: h.color })),
+    [active, idxOf, today, prefs.weekStartsMonday],
   );
   const dow = prefs.weekStartsMonday ? t.dow : [t.dow[6], ...t.dow.slice(0, 6)];
   const byWeekday = useMemo(() => {
     const c = Array(7).fill(0);
     const from = addDays(today, -89);
-    for (const l of logs) if (l.done && l.date >= from && l.date <= today) c[weekdayIndex(l.date, prefs.weekStartsMonday)]++;
+    for (const h of habits) for (const [k, d] of idxOf(h.id)) if (d.complete && k >= from && k <= today) c[weekdayIndex(k, prefs.weekStartsMonday)]++;
     return dow.map((d, i) => ({ d, n: c[i] }));
   }, [logs, today, prefs.weekStartsMonday]); // eslint-disable-line react-hooks/exhaustive-deps
   const focus14 = useMemo(() => {

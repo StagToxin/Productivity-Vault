@@ -1,10 +1,11 @@
 // Saf hesaplama fonksiyonları: XP, seviye, Duolingo tarzı seri, alışkanlık serileri, rozetler.
 // Hepsi kayıtlardan TÜRETİLİR, ayrıca saklanmaz → cihazlar arası çakışma imkânsız.
-import { addDays, diffDays, range, startOfWeek } from './dates';
-import type { FocusSession, Habit, HabitLog, Task } from './types';
+import { addDays, keyOfTs, range, startOfWeek, weekdayIndex } from './dates';
+import type { FocusSession, Habit, HabitLog, HabitSlot, Task } from './types';
 
 export const XP = {
   habit: 10,
+  slot: 5, // bölümlü alışkanlıkta her bölüm
   task: [10, 15, 25] as const, // önceliğe göre
   focusPer5Min: 2,
 };
@@ -15,16 +16,11 @@ export interface Activity {
   focus: FocusSession[];
 }
 
-const keyOfTs = (ts: number) => {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
 /** Gün → kazanılan XP haritası */
 export function xpByDay(a: Activity): Map<string, number> {
   const m = new Map<string, number>();
   const add = (k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
-  for (const l of a.habitLogs) if (l.done && !l.deleted) add(l.date, XP.habit);
+  for (const l of a.habitLogs) if (l.done && !l.deleted) add(l.date, l.slotId ? XP.slot : XP.habit);
   for (const t of a.tasks) if (t.status === 'done' && t.doneAt && !t.deleted) add(keyOfTs(t.doneAt), XP.task[t.priority] ?? 10);
   for (const f of a.focus) if (!f.deleted) add(f.date, Math.floor(f.minutes / 5) * XP.focusPer5Min);
   return m;
@@ -102,6 +98,54 @@ export function computeStreak(byDay: Map<string, number>, goal: number, today: s
   return { current: streak, longest, freezes, todayDone: (byDay.get(today) ?? 0) >= goal, days };
 }
 
+// ---------------------------------------------------------------------------
+// Alışkanlık günleri
+// ---------------------------------------------------------------------------
+
+export interface DayInfo {
+  count: number; // onaylanan bölüm sayısı (bölümsüz alışkanlıkta 0/1)
+  total: number; // gereken bölüm sayısı
+  complete: boolean;
+  slots: Map<string, number | undefined>; // slotId → onay anı
+  at?: number; // bölümsüz alışkanlığın onay anı
+  minutes: number;
+}
+export type HabitIndex = Map<string, DayInfo>;
+
+/** Bir alışkanlığın tüm günlerini tek geçişte özetler. */
+export function buildHabitIndex(h: Habit, logs: HabitLog[]): HabitIndex {
+  const ids = new Set((h.slots ?? []).map((s) => s.id));
+  const slotted = ids.size > 0;
+  const total = slotted ? ids.size : 1;
+  const m: HabitIndex = new Map();
+  for (const l of logs) {
+    if (l.habitId !== h.id || l.deleted) continue;
+    let d = m.get(l.date);
+    if (!d) {
+      d = { count: 0, total, complete: false, slots: new Map(), minutes: 0 };
+      m.set(l.date, d);
+    }
+    d.minutes += l.minutes || 0;
+    if (!l.done) continue;
+    if (slotted) {
+      if (l.slotId && ids.has(l.slotId) && !d.slots.has(l.slotId)) {
+        d.slots.set(l.slotId, l.at);
+        d.count++;
+      }
+    } else if (!l.slotId) {
+      d.count = 1;
+      d.at = l.at;
+    }
+  }
+  for (const d of m.values()) d.complete = d.count >= total;
+  return m;
+}
+
+export const isSlotted = (h: Habit) => (h.slots?.length ?? 0) > 0;
+export const isScheduled = (h: Habit, key: string) => !h.days?.length || h.days.includes(weekdayIndex(key, true));
+export const effectiveTarget = (h: Habit) => (h.days?.length ? h.days.length : Math.min(7, Math.max(1, h.weeklyTarget)));
+export const habitUnit = (h: Habit): 'day' | 'week' => (h.days?.length || effectiveTarget(h) >= 7 ? 'day' : 'week');
+
 export interface HabitStats {
   doneDates: Set<string>;
   weekCount: number; // bu hafta tamamlanan gün
@@ -110,71 +154,72 @@ export interface HabitStats {
   maxStreak: number;
   unit: 'day' | 'week';
   doneToday: boolean;
+  todayCount: number;
+  todayTotal: number;
   monthCount: number;
-  rate30: number; // son 30 günde beklenen tamamlanmaya oranı
+  rate30: number; // son 30 günde beklenene oranı
   totalDone: number;
   minutes: number;
 }
 
 /**
  * Alışkanlık serisi:
- * - Haftada 7 hedefliler → ardışık GÜN sayılır.
- * - Diğerleri (örn. haftada 3) → hedefin tuttuğu ardışık HAFTA sayılır. İçinde bulunulan hafta
- *   henüz hedefi tutmadıysa seriyi bozmaz.
+ * - Her gün / belirli günler → ardışık PLANLI günler sayılır (plan dışı günler seriyi bozmaz).
+ * - Haftada N gün → hedefin tuttuğu ardışık HAFTA sayılır; içinde bulunulan hafta seriyi bozmaz.
+ * - Bölümlü alışkanlıkta gün, tüm bölümler onaylanınca "tamam" sayılır.
  */
-export function habitStats(h: Habit, logs: HabitLog[], today: string, monday = true): HabitStats {
-  const doneDates = new Set(logs.filter((l) => l.habitId === h.id && l.done && !l.deleted).map((l) => l.date));
-  const minutes = logs.filter((l) => l.habitId === h.id && !l.deleted).reduce((s, l) => s + (l.minutes || 0), 0);
+export function habitStats(h: Habit, idx: HabitIndex, today: string, monday = true): HabitStats {
+  const doneDates = new Set<string>();
+  let minutes = 0;
+  for (const [k, d] of idx) {
+    if (d.complete) doneDates.add(k);
+    minutes += d.minutes;
+  }
+  const target = effectiveTarget(h);
+  const unit = habitUnit(h);
   const weekStart = startOfWeek(today, monday);
   const weekDays = range(weekStart, addDays(weekStart, 6));
   const weekCount = weekDays.filter((d) => doneDates.has(d)).length;
-  const target = Math.min(7, Math.max(1, h.weeklyTarget));
   const monthPrefix = today.slice(0, 7);
   const monthCount = [...doneDates].filter((d) => d.startsWith(monthPrefix)).length;
+  const createdKey = keyOfTs(h.createdAt);
+  const sorted = [...doneDates].sort();
+  const first = sorted[0] && sorted[0] < createdKey ? sorted[0] : createdKey;
 
   let streak = 0;
   let maxStreak = 0;
-  const sorted = [...doneDates].sort();
-  const unit: 'day' | 'week' = target >= 7 ? 'day' : 'week';
-
   if (unit === 'day') {
-    // en uzun
     let run = 0;
-    let prev = '';
-    for (const d of sorted) {
-      run = prev && diffDays(d, prev) === 1 ? run + 1 : 1;
+    for (const k of range(first <= today ? first : today, today)) {
+      if (!isScheduled(h, k)) continue;
+      if (doneDates.has(k)) run++;
+      else if (k !== today) run = 0;
       maxStreak = Math.max(maxStreak, run);
-      prev = d;
     }
-    // güncel: bugünden (veya bugün yapılmadıysa dünden) geriye
-    let k = doneDates.has(today) ? today : addDays(today, -1);
-    while (doneDates.has(k)) {
-      streak++;
-      k = addDays(k, -1);
-    }
+    streak = run;
   } else {
     const weekMet = (ws: string) => range(ws, addDays(ws, 6)).filter((d) => doneDates.has(d)).length >= target;
-    if (sorted.length) {
-      let ws = startOfWeek(sorted[0], monday);
-      let run = 0;
-      while (ws <= weekStart) {
-        if (weekMet(ws)) {
-          run++;
-          maxStreak = Math.max(maxStreak, run);
-        } else if (ws !== weekStart) run = 0;
-        ws = addDays(ws, 7);
-      }
-      streak = run;
+    let ws = startOfWeek(first <= today ? first : today, monday);
+    let run = 0;
+    while (ws <= weekStart) {
+      if (weekMet(ws)) {
+        run++;
+        maxStreak = Math.max(maxStreak, run);
+      } else if (ws !== weekStart) run = 0;
+      ws = addDays(ws, 7);
     }
+    streak = run;
   }
 
-  // son 30 gün oranı: beklenen = 30 * hedef/7
-  const from = addDays(today, -29);
-  const last30 = [...doneDates].filter((d) => d >= from && d <= today).length;
-  const createdKey = keyOfTs(h.createdAt);
-  const span = Math.min(30, Math.max(1, diffDays(today, createdKey) + 1));
-  const expected = (span * target) / 7;
-  const rate30 = Math.min(1, last30 / Math.max(1, expected));
+  // son 30 gün: bölümlü günlerde kısmi ilerleme de sayılır
+  const from30 = addDays(today, -29);
+  const spanStart = createdKey > from30 ? createdKey : from30;
+  let doneAmount = 0;
+  for (const [k, d] of idx) if (k >= from30 && k <= today) doneAmount += Math.min(1, d.count / d.total);
+  const spanDays = spanStart <= today ? range(spanStart, today) : [today];
+  const expected = h.days?.length ? spanDays.filter((k) => isScheduled(h, k)).length : (spanDays.length * target) / 7;
+  const rate30 = Math.min(1, doneAmount / Math.max(1, expected));
+  const td = idx.get(today);
 
   return {
     doneDates,
@@ -183,12 +228,62 @@ export function habitStats(h: Habit, logs: HabitLog[], today: string, monday = t
     streak,
     maxStreak,
     unit,
-    doneToday: doneDates.has(today),
+    doneToday: !!td?.complete,
+    todayCount: td?.count ?? 0,
+    todayTotal: td?.total ?? (isSlotted(h) ? h.slots!.length : 1),
     monthCount,
     rate30,
     totalDone: doneDates.size,
     minutes,
   };
+}
+
+export interface MissedItem {
+  habit: Habit;
+  date: string; // haftalıkta haftanın ilk günü
+  kind: 'day' | 'slot' | 'week';
+  slot?: HabitSlot;
+  time?: string; // planlanan saat
+  done?: number; // haftalık: yapılan gün
+  target?: number;
+  partial?: number; // bölümlü günde o gün kaç bölüm yapılmış
+}
+
+/**
+ * Kaçırılanlar: planlı olup yapılmayan günler / bölümler / haftalar.
+ * Bugün: yalnızca saati geçmiş bölümler listelenir.
+ */
+export function missedFor(h: Habit, idx: HabitIndex, from: string, today: string, nowHm: string, monday = true): MissedItem[] {
+  const out: MissedItem[] = [];
+  const createdKey = keyOfTs(h.createdAt);
+  const start = from > createdKey ? from : createdKey;
+  if (start > today) return out;
+
+  if (habitUnit(h) === 'day') {
+    for (const k of range(start, today)) {
+      if (!isScheduled(h, k)) continue;
+      const d = idx.get(k);
+      if (isSlotted(h)) {
+        for (const slot of h.slots!) {
+          if (d?.slots.has(slot.id)) continue;
+          if (k === today && !(slot.time && slot.time < nowHm)) continue;
+          out.push({ habit: h, date: k, kind: 'slot', slot, time: slot.time, partial: d?.count ?? 0 });
+        }
+      } else if (k !== today && !d?.complete) {
+        out.push({ habit: h, date: k, kind: 'day', time: h.reminderTime });
+      }
+    }
+  } else {
+    const target = effectiveTarget(h);
+    const thisWeek = startOfWeek(today, monday);
+    // oluşturulduğu (yarım) hafta atlanır
+    let ws = addDays(startOfWeek(start, monday), start === startOfWeek(start, monday) ? 0 : 7);
+    for (; ws < thisWeek; ws = addDays(ws, 7)) {
+      const done = range(ws, addDays(ws, 6)).filter((k) => idx.get(k)?.complete).length;
+      if (done < target) out.push({ habit: h, date: ws, kind: 'week', done, target });
+    }
+  }
+  return out;
 }
 
 export interface Badge {

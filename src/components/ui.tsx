@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { EMOJIS } from '../lib/actions';
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children, wide = false }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   useEffect(() => {
     const f = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', f);
@@ -9,8 +9,13 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   }, [onClose]);
   return (
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-label={title}>
-        <h2>{title}</h2>
+      <div className={'modal' + (wide ? ' wide' : '')} role="dialog" aria-label={title}>
+        <div className="modal-head">
+          <h2>{title}</h2>
+          <button className="icon-btn" aria-label="✕" onClick={onClose}>
+            ✕
+          </button>
+        </div>
         {children}
       </div>
     </div>

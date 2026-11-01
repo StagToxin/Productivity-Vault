@@ -26,6 +26,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Secret eksikse 8 dk derleyip sonda düşmek yerine hemen, açık bir mesajla dur.
+      - name: İmza anahtarını kontrol et
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret eksik. README > Masaüstü güncelleme imzası"
+            exit 1
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22

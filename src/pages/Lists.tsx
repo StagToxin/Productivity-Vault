@@ -1,14 +1,17 @@
 // Alışkanlıklar, Görevler, Projeler ve Takvim sayfaları
 import { useState } from 'react';
-import { CalendarNav, CalendarView, filterTasks, HabitCard, HabitGridCard, ProjectCard, TaskRow, useCalendarState, type TaskTab } from '../components/blocks';
+import { filterTasks, HabitCard, HabitGridCard, ProjectCard, TaskRow, type TaskTab } from '../components/blocks';
+import { CalendarModeSeg, CalendarNav, CalendarView, useCalendarState, type CalMode } from '../components/Calendar';
+import { useMedia } from '../components/ui';
 import { openEditor } from '../components/Editors';
+import { MissedList } from '../components/HabitViews';
 import { Seg } from '../components/ui';
 import { reorderHabits, saveProject } from '../lib/actions';
 import { useData } from '../lib/store';
 
 export function HabitsPage() {
   const { habits, t } = useData();
-  const [view, setView] = useState<'cards' | 'grid' | 'archived'>('cards');
+  const [view, setView] = useState<'cards' | 'grid' | 'missed' | 'archived'>(location.hash.endsWith(':missed') ? 'missed' : 'cards');
   const active = habits.filter((h) => !h.archived);
   const archived = habits.filter((h) => h.archived);
   const move = (id: string, dir: -1 | 1) => {
@@ -29,9 +32,20 @@ export function HabitsPage() {
         </button>
       </div>
       <div className="chip-row">
-        <Seg value={view} onChange={setView} options={[{ v: 'cards', l: '🎯 ' + t('w_habits').split('&')[0] }, { v: 'grid', l: '☑️ ' + t('w_habitGrid') }, { v: 'archived', l: `🗄 ${t('archived')} (${archived.length})` }]} />
+        <Seg
+          value={view}
+          onChange={setView}
+          options={[
+            { v: 'cards', l: '🎯 ' + t('w_habits').split('&')[0] },
+            { v: 'grid', l: '☑️ ' + t('w_habitGrid') },
+            { v: 'missed', l: `⚠️ ${t('tab_missed')}` },
+            { v: 'archived', l: `🗄 ${t('archived')} (${archived.length})` },
+          ]}
+        />
       </div>
-      {view === 'archived' ? (
+      {view === 'missed' ? (
+        <MissedList />
+      ) : view === 'archived' ? (
         archived.length ? (
           <div className="gallery">{archived.map((h) => <HabitCard key={h.id} h={h} />)}</div>
         ) : (
@@ -155,16 +169,17 @@ export function ProjectsPage() {
 
 export function CalendarPage() {
   const { t } = useData();
-  const c = useCalendarState();
+  const narrow = useMedia('(max-width: 860px)');
+  const c = useCalendarState((narrow ? 'day' : 'weekTime') as CalMode);
   return (
     <div>
       <div className="page-head">
         <h1>🗓 {t('nav_calendar')}</h1>
         <div className="grow" />
-        <Seg value={c.mode} onChange={c.setMode} options={[{ v: 'week', l: t('this_week') }, { v: 'month', l: t('this_month') }]} />
+        <CalendarModeSeg mode={c.mode} setMode={c.setMode} />
       </div>
       <CalendarNav mode={c.mode} anchor={c.anchor} setAnchor={c.setAnchor} />
-      <CalendarView mode={c.mode} anchor={c.anchor} />
+      <CalendarView {...c} />
     </div>
   );
 }

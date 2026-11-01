@@ -4,7 +4,7 @@ import { defaultPrefs, normalizeWidgets } from './actions';
 import { db } from './db';
 import { setDayStartHour, todayKey } from './dates';
 import { makeT, type T } from './i18n';
-import { computeStreak, levelInfo, totalXp, xpByDay, type StreakResult } from './logic';
+import { buildHabitIndex, computeStreak, levelInfo, totalXp, xpByDay, type HabitIndex, type StreakResult } from './logic';
 import type { FocusSession, Habit, HabitLog, Prefs, Project, Task } from './types';
 
 export interface AppData {
@@ -21,6 +21,8 @@ export interface AppData {
   xp: number;
   level: ReturnType<typeof levelInfo>;
   streak: StreakResult;
+  habitIdx: Map<string, HabitIndex>; // alışkanlık → gün özeti
+  idxOf: (habitId: string) => HabitIndex;
 }
 
 const Ctx = createContext<AppData | null>(null);
@@ -57,12 +59,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const F = alive(focus);
     const xpDay = xpByDay({ habitLogs: L, tasks: Tk, focus: F });
     const xp = totalXp(xpDay);
+    const H = alive(habits);
+    const habitIdx = new Map(H.map((h) => [h.id, buildHabitIndex(h, L)]));
+    const empty: HabitIndex = new Map();
     return {
+      habitIdx,
+      idxOf: (id: string) => habitIdx.get(id) ?? empty,
       ready: habits !== undefined && prefsRow !== null,
       today,
       prefs,
       t: makeT(prefs.lang),
-      habits: alive(habits),
+      habits: H,
       logs: L,
       tasks: Tk,
       projects: alive(projects),

@@ -30,7 +30,7 @@ const PAGES: { id: Page; icon: string; mobile: boolean }[] = [
 ];
 
 function readHash(): Page {
-  const h = location.hash.slice(1) as Page;
+  const h = location.hash.slice(1).split(':')[0] as Page;
   return PAGES.some((p) => p.id === h) ? h : 'dashboard';
 }
 

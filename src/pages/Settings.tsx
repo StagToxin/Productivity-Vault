@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Field, Seg, Swatches, Switch, toast } from '../components/ui';
-import { ACCENTS, seedSample, updatePrefs } from '../lib/actions';
+import { ACCENTS, DARK_BGS, LIGHT_BGS, seedSample, updatePrefs } from '../lib/actions';
 import { db, table } from '../lib/db';
 import { APP_VERSION, canInstall, checkDesktopUpdate, isIos, isStandalone, isTauri, notifPermission, notify, onInstallable, promptInstall, requestNotif, type NotifPermission } from '../lib/platform';
 import { useData } from '../lib/store';
@@ -45,6 +45,19 @@ export default function SettingsPage({ onCheckWebUpdate }: { onCheckWebUpdate: (
             </div>
           </div>
         )}
+        <div className="set-row">
+          <div>
+            {t('s_themeColor')} — {t('s_bgDark')}
+          </div>
+          <Swatches value={prefs.bgDark} colors={DARK_BGS} onChange={(bgDark) => set({ bgDark })} />
+        </div>
+        <div className="set-row">
+          <div>
+            {t('s_themeColor')} — {t('s_bgLight')}
+            <div className="small muted">{t('s_themeHint')}</div>
+          </div>
+          <Swatches value={prefs.bgLight} colors={LIGHT_BGS} onChange={(bgLight) => set({ bgLight })} />
+        </div>
         <div className="set-row">
           <div>{t('s_accent')}</div>
           <Swatches value={prefs.accent} colors={ACCENTS} onChange={(accent) => set({ accent })} />

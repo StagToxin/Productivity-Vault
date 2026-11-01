@@ -2,8 +2,10 @@ import { closestCenter, DndContext, KeyboardSensor, PointerSensor, TouchSensor, 
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useState, type ReactNode } from 'react';
-import { CalendarNav, CalendarView, filterTasks, HabitCard, HabitGridCard, ProjectCard, TaskCard, useCalendarState, type TaskTab } from '../components/blocks';
+import { filterTasks, HabitCard, HabitGridCard, ProjectCard, TaskCard, type TaskTab } from '../components/blocks';
+import { CalendarModeSeg, CalendarNav, CalendarView, useCalendarState } from '../components/Calendar';
 import { openEditor } from '../components/Editors';
+import { useMissed } from '../components/HabitViews';
 import { Bar, useMedia } from '../components/ui';
 import { updatePrefs } from '../lib/actions';
 import { addDays, fromKey, isoWeek, startOfWeek } from '../lib/dates';
@@ -159,6 +161,8 @@ function Performance() {
   const lastWeekOverdue = tasks.filter((x) => x.dueDate && x.dueDate >= lwStart && x.dueDate < addDays(lwStart, 7) && (x.status !== 'done' || (x.doneAt && x.doneAt > fromKey(x.dueDate).getTime() + 86400000))).length;
   const monthPrefix = today.slice(0, 7);
   const upcoming = tasks.filter((x) => x.status !== 'done' && x.dueDate && x.dueDate > today && x.dueDate.startsWith(monthPrefix)).length;
+  const missed = useMissed(7);
+  const missedY = missed.filter((x) => x.date === addDays(today, -1)).length;
   const dayName = d.toLocaleDateString(prefs.lang === 'tr' ? 'tr-TR' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   return (
     <div className="card" style={{ gap: 6 }}>
@@ -193,6 +197,11 @@ function Performance() {
       )}
       <hr className="sep" />
       <div className="small">⚠️ {t('perf_overdueLastWeek', { n: lastWeekOverdue })}</div>
+      {missedY > 0 && (
+        <button className="small link-title bad" style={{ padding: 0 }} onClick={() => (location.hash = 'habits:missed')}>
+          🕒 {t('perf_missedYesterday', { n: missedY })} →
+        </button>
+      )}
       <div className="small">📅 {t('perf_upcoming', { n: upcoming })}</div>
     </div>
   );
@@ -331,28 +340,22 @@ function ProjectsWidget() {
 }
 
 function CalendarWidget() {
-  const { t } = useData();
-  const c = useCalendarState();
+  const c = useCalendarState('week');
   return (
     <>
       <div className="chip-row">
-        <button className={'chip' + (c.mode === 'week' ? ' active' : '')} onClick={() => c.setMode('week')}>
-          🗓 {t('this_week')}
-        </button>
-        <button className={'chip' + (c.mode === 'month' ? ' active' : '')} onClick={() => c.setMode('month')}>
-          📅 {t('this_month')}
-        </button>
+        <CalendarModeSeg mode={c.mode} setMode={c.setMode} modes={['day', 'week', 'weekTime', 'month']} />
       </div>
       <CalendarNav mode={c.mode} anchor={c.anchor} setAnchor={c.setAnchor} />
-      <CalendarView mode={c.mode} anchor={c.anchor} />
+      <CalendarView {...c} />
     </>
   );
 }
 
 function HabitStatsWidget() {
-  const { habits, logs, today, t, prefs } = useData();
+  const { habits, idxOf, today, t, prefs } = useData();
   const active = habits.filter((h) => !h.archived);
-  const stats = useMemo(() => active.map((h) => ({ h, s: habitStats(h, logs, today, prefs.weekStartsMonday) })), [active, logs, today, prefs.weekStartsMonday]);
+  const stats = useMemo(() => active.map((h) => ({ h, s: habitStats(h, idxOf(h.id), today, prefs.weekStartsMonday) })), [active, idxOf, today, prefs.weekStartsMonday]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {stats.map(({ h, s }) => (

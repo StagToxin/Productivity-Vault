@@ -1,58 +1,109 @@
 import { useMemo, useState } from 'react';
-import { setTaskStatus, toggleHabit } from '../lib/actions';
-import { addDays, addMonths, daysInMonth, diffDays, fromKey, range, startOfMonth, startOfWeek, weekdayIndex } from '../lib/dates';
-import { habitStats, XP } from '../lib/logic';
+import { checkNextSlot, setTaskStatus, toggleHabit } from '../lib/actions';
+import { addDays, addMonths, daysInMonth, diffDays, fromKey, keyOfTs, startOfMonth, startOfWeek, timeOfTs, weekdayIndex } from '../lib/dates';
+import { effectiveTarget, habitStats, isScheduled, isSlotted, XP, type DayInfo } from '../lib/logic';
 import { useData } from '../lib/store';
 import type { Habit, Project, Task } from '../lib/types';
 import { openEditor } from './Editors';
 import { Bar, toast } from './ui';
 
+/** Gün hücresinin rengi: tamamlandıysa tam renk, kısmi ise ilerlemeye göre saydam. */
+export function cellStyle(h: Habit, d: DayInfo | undefined): React.CSSProperties | undefined {
+  if (!d || d.count === 0) return undefined;
+  if (d.complete) return { background: h.color };
+  const a = Math.round((0.22 + 0.5 * (d.count / d.total)) * 255).toString(16).padStart(2, '0');
+  return { background: h.color + a };
+}
+
+export function useHabitStats(h: Habit) {
+  const { idxOf, today, prefs } = useData();
+  const idx = idxOf(h.id);
+  return { idx, s: useMemo(() => habitStats(h, idx, today, prefs.weekStartsMonday), [h, idx, today, prefs.weekStartsMonday]) };
+}
+
+function targetLabel(h: Habit, t: ReturnType<typeof useData>['t'], prefs: ReturnType<typeof useData>['prefs']) {
+  if (h.days?.length) {
+    const dow = t.dow;
+    return h.days.map((d) => dow[d]).join(' · ');
+  }
+  return t('weekly_x', { n: effectiveTarget(h) });
+}
+
 // ---------- Alışkanlık: seri & hedef kartı ----------
 export function HabitCard({ h }: { h: Habit }) {
-  const { logs, today, t, prefs } = useData();
-  const s = useMemo(() => habitStats(h, logs, today, prefs.weekStartsMonday), [h, logs, today, prefs.weekStartsMonday]);
-  const first = startOfMonth(today);
-  const lead = weekdayIndex(first, prefs.weekStartsMonday);
-  const n = daysInMonth(today);
+  const { today, t, prefs } = useData();
+  const { idx, s } = useHabitStats(h);
+  const [month, setMonth] = useState(startOfMonth(today));
+  const lead = weekdayIndex(month, prefs.weekStartsMonday);
+  const n = daysInMonth(month);
+  const m = fromKey(month);
+  const slotted = isSlotted(h);
   return (
     <div className="card">
-      <div className="card-title clickable" onClick={() => openEditor({ kind: 'habit', id: h.id })} style={{ cursor: 'pointer' }}>
+      <button className="card-title link-title" onClick={() => openEditor({ kind: 'habitDetail', id: h.id })}>
         <span>{h.icon}</span>
         <span className="t">{h.name}</span>
+      </button>
+      <div className="meta">
+        🎯 {targetLabel(h, t, prefs)}
+        {slotted && <span className="badge">×{h.slots!.length}/{t('day_unit')}</span>}
       </div>
-      <div className="meta">🎯 {t('weekly_x', { n: h.weeklyTarget })}</div>
+      <div className="month-nav">
+        <button className="icon-btn" aria-label="‹" onClick={() => setMonth(addMonths(month, -1))}>‹</button>
+        <span className="small muted">{t.months[m.getMonth()]} {m.getFullYear()}</span>
+        <button className="icon-btn" aria-label="›" disabled={month >= startOfMonth(today)} onClick={() => setMonth(addMonths(month, 1))}>›</button>
+      </div>
       <div className="mini-month">
         {Array.from({ length: lead }, (_, i) => (
           <div key={'b' + i} className="c blank" />
         ))}
         {Array.from({ length: n }, (_, i) => {
-          const k = first.slice(0, 8) + String(i + 1).padStart(2, '0');
-          const on = s.doneDates.has(k);
+          const k = month.slice(0, 8) + String(i + 1).padStart(2, '0');
+          const d = idx.get(k);
+          const st = cellStyle(h, d);
           return (
-            <div key={k} className={'c' + (on ? ' on' : '') + (k === today ? ' today' : '') + (k > today ? ' future' : '')} style={on ? { background: h.color } : undefined}>
+            <div key={k} title={d && slotted ? `${d.count}/${d.total}` : k} className={'c' + (st ? ' on' : '') + (k === today ? ' today' : '') + (k > today ? ' future' : '') + (isScheduled(h, k) ? '' : ' off')} style={st}>
               {i + 1}
             </div>
           );
         })}
       </div>
-      <div className={s.doneToday ? 'ok' : 'small muted'} style={s.doneToday ? { color: h.color } : undefined}>
-        {s.doneToday ? '✓ ' + t('completed_today') : '○ ' + t('not_completed')}
-      </div>
+      {slotted ? (
+        <SlotChecklist h={h} date={today} compact />
+      ) : (
+        <div className={s.doneToday ? 'ok' : 'small muted'} style={s.doneToday ? { color: h.color } : undefined}>
+          {s.doneToday ? '✓ ' + t('completed_today') + (idx.get(today)?.at ? ` · ${timeOfTs(idx.get(today)!.at!)}` : '') : '○ ' + t('not_completed')}
+        </div>
+      )}
       <div className="progress-row">
         <span>{t('progress')}</span>
         <Bar value={s.weekProgress} color={h.color} />
-        <span className="small">{Math.round(s.weekProgress * 100)}% ({s.weekCount}/{h.weeklyTarget})</span>
+        <span className="small">{Math.round(s.weekProgress * 100)}% ({s.weekCount}/{effectiveTarget(h)})</span>
       </div>
       <div className="meta">
         {t('streak')} 🔥 {s.streak} {t(s.unit === 'day' ? 'day_unit' : 'week_unit')} | {t('max')}: {s.maxStreak} {t(s.unit === 'day' ? 'day_unit' : 'week_unit')}
       </div>
-      <MarkButton habit={h} done={s.doneToday} />
+      <MarkButton habit={h} done={s.doneToday} count={s.todayCount} total={s.todayTotal} />
     </div>
   );
 }
 
-export function MarkButton({ habit, done }: { habit: Habit; done: boolean }) {
-  const { t } = useData();
+export function MarkButton({ habit, done, count = 0, total = 1 }: { habit: Habit; done: boolean; count?: number; total?: number }) {
+  const { t, today } = useData();
+  if (isSlotted(habit)) {
+    return (
+      <button
+        className={'mark-btn' + (done ? ' on' : '')}
+        onClick={async () => {
+          if (done) return openEditor({ kind: 'habitDay', id: habit.id, date: today });
+          const sl = await checkNextSlot(habit);
+          if (sl) toast(`${habit.icon} ${sl.name} ✓ +${XP.slot} XP`);
+        }}
+      >
+        {done ? `✓ ${t('all_done')} (${count}/${total})` : `${t('mark_next')} (${count}/${total})`}
+      </button>
+    );
+  }
   return (
     <button
       className={'mark-btn' + (done ? ' on' : '')}
@@ -66,40 +117,82 @@ export function MarkButton({ habit, done }: { habit: Habit; done: boolean }) {
   );
 }
 
+/** Bölümlü alışkanlığın bir günündeki bölümler: tıkla → onayla / geri al. Onay saati görünür. */
+export function SlotChecklist({ h, date, compact = false }: { h: Habit; date: string; compact?: boolean }) {
+  const { idxOf, today } = useData();
+  const d = idxOf(h.id).get(date);
+  const nowHm = timeOfTs(Date.now());
+  return (
+    <div className={'slots' + (compact ? ' compact' : '')}>
+      {h.slots!.map((sl) => {
+        const done = d?.slots.has(sl.id);
+        const at = d?.slots.get(sl.id);
+        const late = at && keyOfTs(at) !== date;
+        const overdue = !done && (date < today || (date === today && sl.time && sl.time < nowHm));
+        return (
+          <button
+            key={sl.id}
+            className={'slot' + (done ? ' on' : '') + (overdue ? ' overdue' : '')}
+            style={done ? { borderColor: h.color, background: h.color + '26' } : undefined}
+            onClick={async () => {
+              const now = await toggleHabit(h.id, date, sl.id);
+              if (now) toast(`${h.icon} ${sl.name} ✓ +${XP.slot} XP`);
+            }}
+            title={sl.time ? `${sl.name} ${sl.time}` : sl.name}
+          >
+            <span className="slot-check" style={done ? { background: h.color, borderColor: h.color } : undefined}>{done ? '✓' : ''}</span>
+            <span className="slot-name">{sl.name}</span>
+            {!compact && sl.time && <span className="small muted">{sl.time}</span>}
+            {at && <span className="small" style={{ color: late ? 'var(--yellow)' : h.color }}>{late ? '⏱ ' : ''}{timeOfTs(at)}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---------- Alışkanlık: haftalık ızgara (satır = gün, sütun = hafta) ----------
 export function HabitGridCard({ h, weeks = 9 }: { h: Habit; weeks?: number }) {
-  const { logs, today, t, prefs } = useData();
-  const s = useMemo(() => habitStats(h, logs, today, prefs.weekStartsMonday), [h, logs, today, prefs.weekStartsMonday]);
-  const curWeek = startOfWeek(today, prefs.weekStartsMonday);
+  const { today, t, prefs } = useData();
+  const { idx, s } = useHabitStats(h);
+  const [offset, setOffset] = useState(0); // kaç hafta geriye
+  const curWeek = addDays(startOfWeek(today, prefs.weekStartsMonday), -7 * offset);
   const weekStarts = Array.from({ length: weeks }, (_, i) => addDays(curWeek, -7 * (weeks - 1 - i)));
   const dow = prefs.weekStartsMonday ? t.dow : [t.dow[6], ...t.dow.slice(0, 6)];
+  const slotted = isSlotted(h);
+  const fromD = fromKey(weekStarts[0]);
+  const toD = fromKey(addDays(weekStarts[weeks - 1], 6));
   return (
     <div className="card">
-      <div className="card-title">
+      <button className="card-title link-title" onClick={() => openEditor({ kind: 'habitDetail', id: h.id })}>
         <span>{h.icon}</span>
         <span className="t">{h.name}</span>
-      </div>
+      </button>
       <div className={s.doneToday ? 'ok' : 'small muted'} style={s.doneToday ? { color: h.color } : undefined}>
-        {s.doneToday ? '✓ ' + t('completed_today') : '○ ' + t('not_completed')}
+        {s.doneToday ? '✓ ' + t('completed_today') : slotted ? `◐ ${s.todayCount}/${s.todayTotal}` : '○ ' + t('not_completed')}
       </div>
-      <div className="meta">
-        📅 {t('today_is')}: {fromKey(today).getDate()}/{t.months[fromKey(today).getMonth()]}/{today.slice(0, 4)}
+      <div className="month-nav">
+        <button className="icon-btn" onClick={() => setOffset(offset + weeks)}>‹</button>
+        <span className="small muted">
+          {fromD.getDate()} {t.months[fromD.getMonth()].slice(0, 3)} – {toD.getDate()} {t.months[toD.getMonth()].slice(0, 3)} {toD.getFullYear()}
+        </span>
+        <button className="icon-btn" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - weeks))}>›</button>
       </div>
       <div className="week-grid" style={{ gridTemplateColumns: `22px repeat(${weeks}, 1fr)` }}>
         {dow.map((d, row) => (
           <Row key={d} label={d}>
             {weekStarts.map((ws) => {
               const k = addDays(ws, row);
-              const on = s.doneDates.has(k);
+              const info = idx.get(k);
               const future = k > today;
               return (
                 <button
                   key={k}
-                  title={k}
+                  title={info && slotted ? `${k} · ${info.count}/${info.total}` : k}
                   disabled={future}
-                  className={'c' + (k === today ? ' today' : '') + (future ? ' future' : '')}
-                  style={on ? { background: h.color } : undefined}
-                  onClick={() => toggleHabit(h.id, k)}
+                  className={'c' + (k === today ? ' today' : '') + (future ? ' future' : '') + (isScheduled(h, k) ? '' : ' off')}
+                  style={cellStyle(h, info)}
+                  onClick={() => (slotted ? openEditor({ kind: 'habitDay', id: h.id, date: k }) : toggleHabit(h.id, k))}
                 />
               );
             })}
@@ -114,7 +207,7 @@ export function HabitGridCard({ h, weeks = 9 }: { h: Habit; weeks?: number }) {
       <div className="meta">
         {t('streak')} 🔥 {s.streak} {t(s.unit === 'day' ? 'day_unit' : 'week_unit')} | {t('max')}: {s.maxStreak}
       </div>
-      <MarkButton habit={h} done={s.doneToday} />
+      <MarkButton habit={h} done={s.doneToday} count={s.todayCount} total={s.todayTotal} />
     </div>
   );
 }
@@ -281,93 +374,3 @@ export function ProjectCard({ p }: { p: Project }) {
   );
 }
 
-// ---------- Takvim ----------
-export function CalendarView({ mode, anchor }: { mode: 'week' | 'month'; anchor: string }) {
-  const { tasks, logs, habits, today, t, prefs, projects } = useData();
-  const monday = prefs.weekStartsMonday;
-  let days: string[];
-  if (mode === 'week') {
-    const ws = startOfWeek(anchor, monday);
-    days = range(ws, addDays(ws, 6));
-  } else {
-    const first = startOfMonth(anchor);
-    const ws = startOfWeek(first, monday);
-    const last = addDays(addMonths(first, 1), -1);
-    const we = addDays(startOfWeek(last, monday), 6);
-    days = range(ws, we);
-  }
-  const dow = monday ? t.dow : [t.dow[6], ...t.dow.slice(0, 6)];
-  const month = anchor.slice(0, 7);
-  const habitColor = new Map(habits.map((h) => [h.id, h.color]));
-  const projColor = new Map(projects.map((p) => [p.id, p.color]));
-  return (
-    <div className="cal">
-      {dow.map((d) => (
-        <div key={d} className="h">
-          {d}
-        </div>
-      ))}
-      {days.map((k) => {
-        const dayTasks = tasks.filter((x) => x.dueDate === k);
-        const dayLogs = logs.filter((l) => l.date === k && l.done && habitColor.has(l.habitId));
-        return (
-          <div key={k} className={'day' + (k === today ? ' today' : '') + (mode === 'month' && !k.startsWith(month) ? ' other' : '')} style={mode === 'week' ? { minHeight: 140 } : undefined}>
-            <div className="n">
-              <button className="icon-btn add" aria-label={t('add_task')} onClick={() => openEditor({ kind: 'task', defaults: { dueDate: k } })}>
-                +
-              </button>
-              <b>{fromKey(k).getDate()}</b>
-            </div>
-            {dayLogs.length > 0 && (
-              <div className="dots">
-                {dayLogs.map((l) => (
-                  <i key={l.id} style={{ background: habitColor.get(l.habitId) }} />
-                ))}
-              </div>
-            )}
-            {dayTasks.slice(0, mode === 'week' ? 8 : 3).map((x) => (
-              <div
-                key={x.id}
-                className={'ev' + (x.status === 'done' ? ' done' : '')}
-                style={{ borderLeftColor: (x.projectId && projColor.get(x.projectId)) || undefined }}
-                onClick={() => openEditor({ kind: 'task', id: x.id })}
-                title={x.title}
-              >
-                {x.title}
-              </div>
-            ))}
-            {dayTasks.length > (mode === 'week' ? 8 : 3) && <div className="small muted">+{dayTasks.length - (mode === 'week' ? 8 : 3)}</div>}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-export function CalendarNav({ mode, anchor, setAnchor }: { mode: 'week' | 'month'; anchor: string; setAnchor: (k: string) => void }) {
-  const { t, today } = useData();
-  const d = fromKey(anchor);
-  return (
-    <div className="row" style={{ marginBottom: 10 }}>
-      <b style={{ flex: 1 }}>
-        {t.months[d.getMonth()]} {d.getFullYear()}
-      </b>
-      <button className="btn sm" onClick={() => setAnchor(mode === 'week' ? addDays(anchor, -7) : addMonths(anchor, -1))}>
-        ‹
-      </button>
-      <button className="btn sm" onClick={() => setAnchor(today)}>
-        {t('today')}
-      </button>
-      <button className="btn sm" onClick={() => setAnchor(mode === 'week' ? addDays(anchor, 7) : addMonths(anchor, 1))}>
-        ›
-      </button>
-    </div>
-  );
-}
-
-export function useCalendarState() {
-  const { today } = useData();
-  const [mode, setMode] = useState<'week' | 'month'>('week');
-  const [anchor, setAnchor] = useState(today);
-  return { mode, setMode, anchor, setAnchor };
-}
