@@ -160,3 +160,20 @@ describe('weekly missed', () => {
     expect(m.map((x) => [x.date, x.done])).toEqual([['2026-10-12', 1]]);
   });
 });
+
+describe('dashboard layout', async () => {
+  const { normalizeWidgets, reorderSubset, DEFAULT_WIDGETS } = await import('./actions');
+  it('repairs corrupted widget lists (undefined entries, duplicates)', () => {
+    const bad = [undefined, { id: 'tasks', hidden: false, collapsed: false }, null, { id: 'tasks', hidden: true, collapsed: false }] as never;
+    const out = normalizeWidgets(bad);
+    expect(out.length).toBe(DEFAULT_WIDGETS.length);
+    expect(out.every((w) => w && w.id)).toBe(true);
+    expect(out[0].id).toBe('tasks');
+  });
+  it('reorders only the dragged column and never produces holes', () => {
+    const all = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id }));
+    // b, d, e sütunu: e'yi en üste taşı
+    const out = reorderSubset(all, ['b', 'd', 'e'], ['e', 'b', 'd']);
+    expect(out.map((w) => w.id)).toEqual(['a', 'e', 'c', 'b', 'd']);
+  });
+});

@@ -7,7 +7,7 @@ import { CalendarModeSeg, CalendarNav, CalendarView, useCalendarState } from '..
 import { openEditor } from '../components/Editors';
 import { useMissed } from '../components/HabitViews';
 import { Bar, useMedia } from '../components/ui';
-import { updatePrefs } from '../lib/actions';
+import { DEFAULT_WIDGETS, reorderSubset, updatePrefs } from '../lib/actions';
 import { addDays, fromKey, isoWeek, startOfWeek } from '../lib/dates';
 import { habitStats } from '../lib/logic';
 import { useData } from '../lib/store';
@@ -42,10 +42,7 @@ export default function Dashboard({ go }: { go: (p: Page) => void }) {
     const to = subset.indexOf(e.over.id as WidgetId);
     const reordered = arrayMove(subset, from, to);
     // Alt kümenin yeni sırasını genel listeye yerleştir
-    let i = 0;
-    const set = new Set(subset);
-    const next = widgets.map((w) => (set.has(w.id) ? widgets.find((x) => x.id === reordered[i++])! : w));
-    void save(next);
+    void save(reorderSubset(widgets, subset, reordered));
   };
 
   const render = (w: WidgetPref) => (
@@ -76,7 +73,16 @@ export default function Dashboard({ go }: { go: (p: Page) => void }) {
           {editing ? '✓ ' + t('done_btn') : '⚙︎ ' + t('edit_layout')}
         </button>
       </div>
-      {editing && <p className="muted small" style={{ marginTop: -8 }}>{t('drag_hint')}</p>}
+      {editing && (
+        <div className="row" style={{ marginTop: -8, marginBottom: 12 }}>
+          <span className="muted small" style={{ flex: 1 }}>
+            {t('drag_hint')}
+          </span>
+          <button className="btn sm" onClick={() => save(DEFAULT_WIDGETS.map((id) => ({ id, hidden: false, collapsed: false })))}>
+            ↺ {t('reset_layout')}
+          </button>
+        </div>
+      )}
       {wide ? (
         <div className="dash">
           {column(NARROW)}

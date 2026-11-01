@@ -48,14 +48,29 @@ export function defaultPrefs(): Omit<Prefs, 'updatedAt' | 'dirty' | 'deleted'> {
 export function normalizeWidgets(list: WidgetPref[] | undefined): WidgetPref[] {
   const seen = new Set<string>();
   const out: WidgetPref[] = [];
-  for (const w of list ?? []) {
-    if (DEFAULT_WIDGETS.includes(w.id) && !seen.has(w.id)) {
+  // Bozuk kayıtlara karşı dayanıklı: geçersiz/boş öğeler atlanır, eksikler sona eklenir.
+  for (const w of Array.isArray(list) ? list : []) {
+    if (w && typeof w === 'object' && DEFAULT_WIDGETS.includes(w.id) && !seen.has(w.id)) {
       seen.add(w.id);
       out.push(w);
     }
   }
   for (const id of DEFAULT_WIDGETS) if (!seen.has(id)) out.push({ id, hidden: false, collapsed: false });
   return out;
+}
+
+/**
+ * Görünen alt kümenin (ör. bir sütunun) yeni sırasını tüm listeye yerleştirir.
+ * Alt kümedeki her konum, yeni sıradaki bir sonraki öğeyle doldurulur; diğerleri yerinde kalır.
+ */
+export function reorderSubset<W extends { id: string }>(all: W[], subset: string[], reordered: string[]): W[] {
+  const byId = new Map(all.map((w) => [w.id, w]));
+  const inSubset = new Set(subset);
+  let i = 0;
+  return all.map((w) => {
+    if (!inSubset.has(w.id)) return w;
+    return byId.get(reordered[i++]) ?? w;
+  });
 }
 
 export async function updatePrefs(changes: Partial<Prefs>) {

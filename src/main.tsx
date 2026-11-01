@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { db } from './lib/db';
 import { DataProvider } from './lib/store';
 import './styles.css';
@@ -19,9 +20,11 @@ db.open()
   .then(() => {
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
-        <DataProvider>
-          <App />
-        </DataProvider>
+        <ErrorBoundary>
+          <DataProvider>
+            <App />
+          </DataProvider>
+        </ErrorBoundary>
       </StrictMode>,
     );
   });
