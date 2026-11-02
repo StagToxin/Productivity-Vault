@@ -6,7 +6,7 @@ import { useMedia } from '../components/ui';
 import { openEditor } from '../components/Editors';
 import { MissedList } from '../components/HabitViews';
 import { Seg } from '../components/ui';
-import { reorderHabits, saveProject } from '../lib/actions';
+import { reorderHabits } from '../lib/actions';
 import { useData } from '../lib/store';
 
 export function HabitsPage() {
@@ -107,11 +107,9 @@ export function TasksPage() {
 }
 
 export function ProjectsPage() {
-  const { projects, tasks, t } = useData();
+  const { projects, t } = useData();
   const [tab, setTab] = useState<'active' | 'done'>('active');
-  const [open, setOpen] = useState<string | null>(null);
   const list = projects.filter((p) => p.status === tab);
-  const sel = projects.find((p) => p.id === open);
   return (
     <div>
       <div className="page-head">
@@ -131,38 +129,9 @@ export function ProjectsPage() {
       </div>
       <div className="gallery">
         {list.map((p) => (
-          <div key={p.id} onClickCapture={(e) => (e.stopPropagation(), setOpen(p.id))}>
-            <ProjectCard p={p} />
-          </div>
+          <ProjectCard key={p.id} p={p} />
         ))}
       </div>
-      {sel && (
-        <div className="section" style={{ marginTop: 18 }}>
-          <div className="section-head">
-            <div className="section-title">
-              <span className="emoji">{sel.icon}</span> {sel.name}
-            </div>
-            <button className="btn sm" onClick={() => openEditor({ kind: 'project', id: sel.id })}>
-              {t('edit')}
-            </button>
-            <button className="btn sm" onClick={() => saveProject({ ...sel, status: sel.status === 'done' ? 'active' : 'done' })}>
-              {sel.status === 'done' ? t('reopen') : '✓ ' + t('mark_project_done')}
-            </button>
-            <button className="icon-btn" onClick={() => setOpen(null)}>
-              ✕
-            </button>
-          </div>
-          {tasks
-            .filter((x) => x.projectId === sel.id)
-            .sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done'))
-            .map((x) => (
-              <TaskRow key={x.id} task={x} />
-            ))}
-          <button className="new-row" style={{ marginTop: 8 }} onClick={() => openEditor({ kind: 'task', defaults: { projectId: sel.id } })}>
-            ＋ {t('add_task')}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

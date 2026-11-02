@@ -1,12 +1,24 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Ana pencere izinleri",
-  "windows": ["main"],
+  "description": "Ana pencere ve k\u00fc\u00e7\u00fck odak penceresi izinleri",
+  "windows": [
+    "main",
+    "mini"
+  ],
   "permissions": [
     "core:default",
     "notification:default",
     "process:allow-restart",
-    "updater:default"
+    "updater:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-scale-factor",
+    "core:window:allow-outer-position",
+    "core:window:allow-set-position"
   ]
 }

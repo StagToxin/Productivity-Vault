@@ -100,3 +100,22 @@ export function timeOfTs(ts: number): string {
 export function keyOfTs(ts: number): string {
   return toKey(new Date(ts));
 }
+
+/** Bir anın gün anahtarı — gün bitiş saatini (gece kuşları) hesaba katar. */
+export function dayKeyOfTs(ts: number): string {
+  return todayKey(new Date(ts));
+}
+
+/** Gün anahtarının başladığı an (ms) — gün bitiş saati ayarına göre. */
+export function dayStartTs(key: string): number {
+  return fromKey(key).getTime() + dayStartHour * 3600000;
+}
+
+export function addMonthsKeepDay(key: string, n: number): string {
+  const d = fromKey(key);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  return toKey(d);
+}

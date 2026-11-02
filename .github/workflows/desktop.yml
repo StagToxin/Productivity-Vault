@@ -68,7 +68,7 @@ jobs:
           VITE_REPO: ${{ github.repository }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'Productivity Vault ${{ github.ref_name }}'
+          releaseName: 'Verim Asistanı ${{ github.ref_name }}'
           releaseBody: |
             ## İndir
             - **Windows:** `Productivity.Vault_..._x64-setup.exe` dosyasını indir ve çalıştır.

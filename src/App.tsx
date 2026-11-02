@@ -1,15 +1,18 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { EditorHost } from './components/Editors';
+import { EditorHost, openEditor } from './components/Editors';
 import { celebrate, toast, Toaster } from './components/ui';
+import { PipHost } from './components/MiniTimer';
+import { WhatsNew } from './components/WhatsNew';
 import { logFocus } from './lib/actions';
 import { STREAK_MILESTONES, XP } from './lib/logic';
-import { checkDesktopUpdate, isTauri, notify } from './lib/platform';
+import { checkDesktopUpdate, closeMiniWindow, isTauri, notify } from './lib/platform';
 import { useReminders } from './lib/reminders';
 import { useData } from './lib/store';
 import { startSync, useSyncStatus } from './lib/sync';
 import { useTheme } from './lib/theme';
-import { prefsRef, useTimerWatcher } from './lib/timer';
+import { getTimer, useTimerWatcher, type TimerEvent } from './lib/timer';
+import { db } from './lib/db';
 import Dashboard from './pages/Dashboard';
 import FocusPage from './pages/Focus';
 import { CalendarPage, HabitsPage, ProjectsPage, TasksPage } from './pages/Lists';
@@ -42,10 +45,12 @@ export default function App() {
   const sync = useSyncStatus();
   useTheme(prefs);
   useReminders(data);
-  prefsRef.current = prefs;
 
   useEffect(() => {
-    const f = () => setPage(readHash());
+    const f = () => {
+      setPage(readHash());
+      openEditor(null); // sayfa değişince açık pencereleri kapat
+    };
     window.addEventListener('hashchange', f);
     startSync();
     return () => window.removeEventListener('hashchange', f);
@@ -70,22 +75,57 @@ export default function App() {
     }
   }, [streak.current, streak.todayDone, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- Pomodoro bittiğinde ----
-  const onTimerDone = useCallback(
-    (focusMin: number, s: { habitId?: string; taskId?: string }) => {
-      if (focusMin > 0) {
-        void logFocus(focusMin, { habitId: s.habitId, taskId: s.taskId });
-        const xp = Math.floor(focusMin / 5) * XP.focusPer5Min;
-        void notify('⏱️ Productivity Vault', t('focus_done', { n: xp }));
-        toast('🍅 ' + t('focus_done', { n: xp }));
-      } else {
-        void notify('⏱️ Productivity Vault', t('break_done'));
-        toast('☕ ' + t('break_done'));
+  // ---- Odak olayları (ders/mola bitti, plan bitti) ----
+  const onTimerEvents = useCallback(
+    async (evs: TimerEvent[]) => {
+      for (const e of evs) {
+        if (e.type === 'planDone') {
+          celebrate('🏁', t('plan_done'));
+          void notify('🏁 ' + t('appName'), t('plan_done'));
+          void closeMiniWindow();
+          continue;
+        }
+        const focusMin = e.type === 'focusPartial' ? e.min : e.kind === 'focus' ? e.min : 0;
+        let extra = '';
+        if (focusMin > 0) {
+          const r = await logFocus(focusMin, { habitId: e.habitId, taskId: e.taskId });
+          const xp = Math.floor(focusMin / 5) * XP.focusPer5Min;
+          extra = ` +${xp} XP`;
+          if (r?.check?.ok) {
+            const task = await db.tasks.get(e.taskId!);
+            const c = r.check;
+            toast(c.completed ? `🎉 ${task?.title} ${t('done')}!` : `🎯 ${task?.title} ${c.count}/${c.target} (%${Math.round((c.count / c.target) * 100)})`);
+          }
+        }
+        if (e.type === 'focusPartial') {
+          toast(`⏱ ${t('sw_saved', { n: focusMin })}${extra}`);
+          continue;
+        }
+        const next = e.next === 'long' ? t('ev_longBreak') : e.next === 'short' ? t('ev_shortBreak') : e.next === 'focus' ? t('ev_lesson') : '';
+        const title = e.kind === 'focus' ? '🍅 ' + t('ev_lessonDone') + extra : '☕ ' + t('ev_breakDone');
+        const auto = getTimer().running;
+        const body = next ? (auto ? next : `${next} · ${t('ev_waiting')}`) : '';
+        void notify(title, body || t('appName'));
+        toast(`${title}${body ? ' · ' + body : ''}`);
       }
     },
     [t],
   );
-  useTimerWatcher(onTimerDone);
+  useTimerWatcher(onTimerEvents);
+
+  // Plan/kronometre durunca masaüstündeki küçük pencereyi kapat
+  useEffect(() => {
+    if (!isTauri) return;
+    let wasBusy = false;
+    const id = setInterval(() => {
+      const s = getTimer();
+      const busy = s.active || !!s.swStart || s.swAcc > 0;
+      if (wasBusy && !busy) void closeMiniWindow();
+      wasBusy = busy;
+    }, 1500);
+    return () => clearInterval(id);
+  }, []);
+
 
   // ---- Güncellemeler ----
   const {
@@ -194,6 +234,8 @@ export default function App() {
       )}
       <EditorHost />
       <Toaster />
+      <PipHost />
+      <WhatsNew />
       {needRefresh && (
         <div className="toasts" style={{ bottom: 'calc(150px + env(safe-area-inset-bottom))' }}>
           <div className="toast">

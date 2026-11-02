@@ -1,12 +1,13 @@
 // Saf hesaplama fonksiyonları: XP, seviye, Duolingo tarzı seri, alışkanlık serileri, rozetler.
 // Hepsi kayıtlardan TÜRETİLİR, ayrıca saklanmaz → cihazlar arası çakışma imkânsız.
 import { addDays, keyOfTs, range, startOfWeek, weekdayIndex } from './dates';
-import type { FocusSession, Habit, HabitLog, HabitSlot, Task } from './types';
+import type { FocusSession, Habit, HabitLog, HabitSlot, Task, TaskCheck } from './types';
 
 export const XP = {
   habit: 10,
   slot: 5, // bölümlü alışkanlıkta her bölüm
   task: [10, 15, 25] as const, // önceliğe göre
+  taskCheck: 5, // hedefli görevde her tik
   focusPer5Min: 2,
 };
 
@@ -14,6 +15,7 @@ export interface Activity {
   habitLogs: HabitLog[];
   tasks: Task[];
   focus: FocusSession[];
+  checks?: TaskCheck[];
 }
 
 /** Gün → kazanılan XP haritası */
@@ -23,6 +25,7 @@ export function xpByDay(a: Activity): Map<string, number> {
   for (const l of a.habitLogs) if (l.done && !l.deleted) add(l.date, l.slotId ? XP.slot : XP.habit);
   for (const t of a.tasks) if (t.status === 'done' && t.doneAt && !t.deleted) add(keyOfTs(t.doneAt), XP.task[t.priority] ?? 10);
   for (const f of a.focus) if (!f.deleted) add(f.date, Math.floor(f.minutes / 5) * XP.focusPer5Min);
+  for (const c of a.checks ?? []) if (!c.deleted) add(c.date, XP.taskCheck);
   return m;
 }
 

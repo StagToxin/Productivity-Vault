@@ -4,13 +4,21 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const arg = process.argv[2] ?? 'patch';
+const arg = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'patch';
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 const [ma, mi, pa] = pkg.version.split('.').map(Number);
 const next =
   arg === 'major' ? `${ma + 1}.0.0` : arg === 'minor' ? `${ma}.${mi + 1}.0` : arg === 'patch' ? `${ma}.${mi}.${pa + 1}` : arg;
 if (!/^\d+\.\d+\.\d+$/.test(next)) {
   console.error('Geçersiz sürüm:', next);
+  process.exit(1);
+}
+
+// Sürüm notu yazılmış mı? (Uygulama güncellemeden sonra "Yenilikler" penceresinde bunu gösterir.)
+const notes = readFileSync('src/lib/changelog.ts', 'utf8').match(/version: '(\d+\.\d+\.\d+)'/);
+if (notes && notes[1] !== next && !process.argv.includes('--no-notes')) {
+  console.error(`Sürüm notlarında en üstteki sürüm ${notes[1]}, çıkarılacak sürüm ${next}.`);
+  console.error(`src/lib/changelog.ts dosyasına ${next} için not ekle ya da numarayı düzelt (notsuz çıkarmak için: --no-notes).`);
   process.exit(1);
 }
 

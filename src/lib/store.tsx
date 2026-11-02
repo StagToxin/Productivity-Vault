@@ -5,7 +5,7 @@ import { db } from './db';
 import { setDayStartHour, todayKey } from './dates';
 import { makeT, type T } from './i18n';
 import { buildHabitIndex, computeStreak, levelInfo, totalXp, xpByDay, type HabitIndex, type StreakResult } from './logic';
-import type { FocusSession, Habit, HabitLog, Prefs, Project, Task } from './types';
+import type { FocusSession, Habit, HabitLog, Prefs, Project, Task, TaskCheck } from './types';
 
 export interface AppData {
   ready: boolean;
@@ -17,6 +17,8 @@ export interface AppData {
   tasks: Task[];
   projects: Project[];
   focus: FocusSession[];
+  checks: TaskCheck[];
+  checksOf: (taskId: string) => TaskCheck[]; // sıralı
   xpDay: Map<string, number>;
   xp: number;
   level: ReturnType<typeof levelInfo>;
@@ -35,6 +37,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const tasks = useLiveQuery(() => db.tasks.toArray());
   const projects = useLiveQuery(() => db.projects.toArray());
   const focus = useLiveQuery(() => db.focus.toArray());
+  const checks = useLiveQuery(() => db.taskChecks.toArray());
   const prefsRow = useLiveQuery(() => db.prefs.get('prefs'), [], null);
 
   // Gün değişimini yakala (uygulama gece açık kalırsa)
@@ -57,7 +60,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const L = alive(logs);
     const Tk = alive(tasks);
     const F = alive(focus);
-    const xpDay = xpByDay({ habitLogs: L, tasks: Tk, focus: F });
+    const C = alive(checks).sort((a, b) => a.at - b.at);
+    const byTask = new Map<string, TaskCheck[]>();
+    for (const c of C) byTask.set(c.taskId, [...(byTask.get(c.taskId) ?? []), c]);
+    const none: TaskCheck[] = [];
+    const xpDay = xpByDay({ habitLogs: L, tasks: Tk, focus: F, checks: C });
     const xp = totalXp(xpDay);
     const H = alive(habits);
     const habitIdx = new Map(H.map((h) => [h.id, buildHabitIndex(h, L)]));
@@ -74,12 +81,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       tasks: Tk,
       projects: alive(projects),
       focus: F,
+      checks: C,
+      checksOf: (id: string) => byTask.get(id) ?? none,
       xpDay,
       xp,
       level: levelInfo(xp),
       streak: computeStreak(xpDay, Math.max(1, prefs.dailyGoalXp), today),
     };
-  }, [habits, logs, tasks, projects, focus, prefs, prefsRow, today]);
+  }, [habits, logs, tasks, projects, focus, checks, prefs, prefsRow, today]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

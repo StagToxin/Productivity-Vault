@@ -92,3 +92,74 @@ export async function promptInstall() {
   await deferred.prompt();
   deferred = null;
 }
+
+// ---------- Masaüstü küçük zamanlayıcı penceresi (her zaman üstte) ----------
+const MINI_POS = 'vault.miniPos';
+
+export async function openMiniWindow() {
+  if (!isTauri) return;
+  try {
+    const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+    const existing = await WebviewWindow.getByLabel('mini');
+    if (existing) {
+      await existing.show();
+      return;
+    }
+    let pos: { x: number; y: number } | null = null;
+    try {
+      pos = JSON.parse(localStorage.getItem(MINI_POS) ?? 'null');
+    } catch {
+      /* */
+    }
+    const w = new WebviewWindow('mini', {
+      url: 'mini.html',
+      title: 'Verim',
+      width: 260,
+      height: 128,
+      alwaysOnTop: true,
+      decorations: false,
+      resizable: false,
+      skipTaskbar: true,
+      focus: false,
+      shadow: true,
+      ...(pos ? { x: pos.x, y: pos.y } : { x: Math.max(0, screen.availWidth - 290), y: 40 }),
+    });
+    w.once('tauri://error', (e) => console.warn('mini window', e));
+  } catch (e) {
+    console.warn('mini window', e);
+  }
+}
+
+export async function closeMiniWindow() {
+  if (!isTauri) return;
+  try {
+    const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+    const w = await WebviewWindow.getByLabel('mini');
+    await w?.close();
+  } catch {
+    /* */
+  }
+}
+
+/** Küçük pencerenin içinden: konumu hatırla. */
+export async function rememberMiniPosition() {
+  if (!isTauri) return () => {};
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  const win = getCurrentWindow();
+  const f = await win.scaleFactor();
+  return win.onMoved(({ payload }) => {
+    try {
+      localStorage.setItem(MINI_POS, JSON.stringify({ x: Math.round(payload.x / f), y: Math.round(payload.y / f) }));
+    } catch {
+      /* */
+    }
+  });
+}
+
+export async function closeSelf() {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  await getCurrentWindow().close();
+}
+
+// ---------- Tarayıcı: Resim içinde resim (Document Picture-in-Picture, Chrome/Edge masaüstü) ----------
+export const canPip = typeof window !== 'undefined' && 'documentPictureInPicture' in window && !isTauri;

@@ -1,6 +1,6 @@
-# 🔥 Productivity Vault
+# ✅ Verim Asistanı
 
-Notion "Productivity Vault" şablonundan esinlenen, **offline çalışan** ve **internet gelince otomatik eşitlenen** alışkanlık / görev / proje / odak uygulaması.
+(Eski adı Productivity Vault.) Notion "Productivity Vault" şablonundan esinlenen, **offline çalışan** ve **internet gelince otomatik eşitlenen** alışkanlık / görev / proje / odak uygulaması.
 
 | Platform | Nasıl çalışır | Güncelleme |
 |---|---|---|
@@ -17,6 +17,13 @@ Arkadaşın için basit anlatım: **[KURULUM.md](KURULUM.md)**
 - **Bölümlü alışkanlıklar** — günde birkaç kez onaylanan alışkanlıklar (5 vakit namaz, 3 öğün, 8 bardak su, ilaç hazır şablonları); her bölümün planlanan saati ve onaylandığı saat kaydedilir, saatinde bildirim gelir
 - **Geçmiş** — alışkanlık detayında yıl yıl ısı haritası, aylık başarı %, bölüm başına başarı ve ortalama saat, tarih+saatli kayıt listesi; kartlarda geçmiş aylara/haftalara gezinme
 - **Kaçırılanlar** — planlı olup yapılmayan gün/bölüm/haftalar tarih ve planlanan saatleriyle; "Telafi et" ile geç olarak işaretlenir
+- **Hedefli görevler** — "9 Kasım'a kadar 3 kez çalış": her tik ayrı kaydedilir, yüzde + tempo (yolunda/geride/önde); şartlar: günde 1 (takvim günü), her X saatte bir (son tikten itibaren, 1–24 sa), pomodoro şartı (göreve bağlı odak dolunca tik otomatik atılır)
+- **Tekrarlayan görevler ve alt adımlar** — bitince bir sonraki aynı kimlikle oluşturulur (iki cihaz aynısını üretir, çift kayıt olmaz)
+- **Proje detayı** — aktif / biten / yapılamayan görevler, 12 aylık şerit (her ay gün sayısı kadar kutu; çakışan günler koyulaşır veya renklere bölünür), Gantt planı (düzenleme modunda sürükle-bırak), **hızlı plan** (`Literatür 10g`, `Ara rapor !`, `Prototip 3hf x5`, `# Aşama`)
+- **Takvimde sürükleyerek seçim** — fareyle boş alanda sürükle, telefonda yarım saniye basılı tut; seçime art arda görev/alışkanlık eklenir; mevcut etkinliklerin üstünden başlayan hareket seçim yapmaz
+- **Odak planı** — toplam süre ver, dersler (20–60 dk) ve kısa/uzun molalar otomatik yerleşsin; molasız tek parça; "molalar dahil / net çalışma"; kayıtlı planlar; molayı geç; ⏱ kronometre
+- **Küçük zamanlayıcı** — masaüstünde her zaman üstte duran, sürüklenebilir pencere (`mini.html`); Chrome/Edge'de "resim içinde resim"
+- **Yenilikler penceresi** — güncellemeden sonra `src/lib/changelog.ts`'teki notlar bir kez gösterilir
 - **Alışkanlıklar** — haftalık hedef (haftada 1–7 gün) veya belirli günler (Pzt/Çar/Cum…), aylık mini takvim, gün×hafta ızgarası (geçmiş günlere tıklayarak işaretleme), gün/hafta bazlı seri + maksimum seri, hatırlatma saati, arşiv, renk & emoji
 - **Duolingo tarzı seri** — günlük XP hedefi, 🔥 günlük seri, her 7 günde 1 🧊 seri dondurma (en fazla 2, kaçırılan günde otomatik harcanır), 3/7/14/30/50/100… gün kutlamaları, akşam "serin tehlikede" bildirimi
 - **Oyunlaştırma** — XP (alışkanlık +10, görev +10/15/25 önceliğe göre, odak 5 dk başına +2), seviyeler, 13 rozet
@@ -92,6 +99,7 @@ npm test               # mantık + eşitleme testleri
 npm run release        # 1.0.0 → 1.0.1, commit + tag + push
 ```
 - Sadece web/telefon düzeltmesi için `git push` yeterli (etiket gerekmez).
+- Sürüm çıkarmadan önce `src/lib/changelog.ts` dosyasının en üstüne yeni sürümün notunu ekle (yoksa `npm run release` uyarır; notsuz çıkarmak için `--no-notes`).
 - Masaüstü kurulumlar bir sonraki açılışta "Yeni sürüm hazır → Güncelle" gösterir.
 - Telefonlar uygulamayı açınca aynı bildirimi görür.
 
@@ -105,10 +113,13 @@ Masaüstünü yerelde denemek: `npm run tauri dev` (Rust + [Tauri önkoşulları
 | `src/lib/dates.ts` | Tarih yardımcıları |
 | `src/lib/db.ts` | IndexedDB şeması, yazma fonksiyonları, mantıksal saat |
 | `src/lib/logic.ts` | XP, seviye, seri, dondurma, alışkanlık serileri, rozetler |
+| `src/lib/tasks.ts` | Hedefli görev, tik şartları, tempo, tekrar, hızlı plan ayrıştırıcı |
+| `src/lib/plan.ts` | Odak planı üretici (ders/mola dizisi) |
+| `src/lib/timer.ts` | Plan + kronometre zamanlayıcı (pencereler arası ortak durum) |
+| `src/lib/changelog.ts` | Sürüm notları |
 | `src/lib/sync.ts` | Offline-first eşitleme motoru |
 | `src/lib/actions.ts` | Tüm kullanıcı işlemleri + örnek veri |
 | `src/lib/i18n.ts` | TR/EN metinler |
-| `src/lib/timer.ts` | Pomodoro |
 | `src/lib/reminders.ts`, `platform.ts` | Bildirim, güncelleyici, kurulum |
 | `src/pages/*` | Sayfalar |
 | `supabase/schema.sql` | Sunucu tablosu + RLS + LWW fonksiyonu |

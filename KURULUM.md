@@ -1,4 +1,4 @@
-# 📲 Productivity Vault — Kurulum (çok kolay)
+# 📲 Verim Asistanı — Kurulum (çok kolay)
 
 Stag sana bir **web adresi** gönderecek, örneğin:
 `https://<kullanici>.github.io/productivity-vault/`

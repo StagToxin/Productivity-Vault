@@ -4,6 +4,7 @@ import { ACCENTS, DARK_BGS, LIGHT_BGS, seedSample, updatePrefs } from '../lib/ac
 import { db, table } from '../lib/db';
 import { APP_VERSION, canInstall, checkDesktopUpdate, isIos, isStandalone, isTauri, notifPermission, notify, onInstallable, promptInstall, requestNotif, type NotifPermission } from '../lib/platform';
 import { useData } from '../lib/store';
+import { showReleaseNotes } from '../components/WhatsNew';
 import { explainSupaError, getSupaConfig, hasSupaOverride, setSupaConfig, testSupaConfig } from '../lib/supabase';
 import { signIn, signOut, signUp, syncNow, useSyncStatus, wipeLocal } from '../lib/sync';
 import { SYNC_TABLES, type Lang, type ThemeMode } from '../lib/types';
@@ -86,14 +87,12 @@ export default function SettingsPage({ onCheckWebUpdate }: { onCheckWebUpdate: (
           <div>{t('s_dayStart')}</div>
           <Seg value={prefs.dayStartHour} onChange={(dayStartHour) => set({ dayStartHour })} options={[0, 1, 2, 3, 4].map((v) => ({ v, l: `0${v}:00` }))} />
         </div>
-        <div className="set-row">
-          <div>{t('s_focus')}</div>
-          <div className="row">
-            <NumberIn label={t('focus')} value={prefs.focusMinutes} onChange={(focusMinutes) => set({ focusMinutes })} />
-            <NumberIn label={t('short_break')} value={prefs.shortBreak} onChange={(shortBreak) => set({ shortBreak })} />
-            <NumberIn label={t('long_break')} value={prefs.longBreak} onChange={(longBreak) => set({ longBreak })} />
+        {isTauri && (
+          <div className="set-row">
+            <div>{t('fc_miniAuto')}</div>
+            <Switch on={prefs.miniTimer !== false} onChange={(miniTimer) => set({ miniTimer })} />
           </div>
-        </div>
+        )}
       </div>
 
       <NotifSection />
@@ -120,6 +119,9 @@ export default function SettingsPage({ onCheckWebUpdate }: { onCheckWebUpdate: (
             }}
           >
             🔄 {t('s_checkUpdate')}
+          </button>
+          <button className="btn sm" onClick={() => showReleaseNotes(true)}>
+            📝 {t('s_releaseNotes')}
           </button>
         </div>
         {!isTauri && !isStandalone && <InstallRow />}
@@ -355,7 +357,7 @@ function NotifSection() {
       </div>
       <div className="set-row">
         <div className="small muted">🔔</div>
-        <button className="btn sm" onClick={() => notify('Productivity Vault', '🔥 Test')}>
+        <button className="btn sm" onClick={() => notify(t('appName'), '✅ Test')}>
           {t('s_notifTest')}
         </button>
       </div>

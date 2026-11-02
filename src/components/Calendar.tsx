@@ -3,6 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toggleHabit } from '../lib/actions';
 import { addDays, addMonths, daysInMonth, fromKey, hmToMin, isoWeek, minToHm, range, startOfMonth, startOfWeek, timeOfTs, weekdayIndex } from '../lib/dates';
 import { isScheduled, isSlotted } from '../lib/logic';
+import { onDay, startOf } from '../lib/tasks';
+import { editorOpen } from './Editors';
+import { useDragSelect } from './useDragSelect';
 import { useData } from '../lib/store';
 import { openEditor } from './Editors';
 import { Seg } from './ui';
@@ -91,17 +94,46 @@ function MonthWeekGrid({ mode, anchor, onDayClick }: { mode: 'week' | 'month'; a
   const projColor = new Map(projects.map((p) => [p.id, p.color]));
   const active = habits.filter((h) => !h.archived);
   const max = mode === 'week' ? 8 : 3;
+  const calRef = useRef<HTMLDivElement>(null);
+  const [sel, setSel] = useState<{ a: string; b: string } | null>(null);
+  const anchorK = useRef<string | null>(null);
+  useEffect(() => setSel(null), [days[0], days.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEscape(() => setSel(null), !!sel);
+  useDragSelect(calRef, {
+    isEmpty: (tg) => {
+      const el = tg as HTMLElement | null;
+      if (!el?.closest || el.closest('button, .ev, .sel-menu')) return false;
+      return !!el.closest('.day');
+    },
+    pointAt: ({ x, y }) => ((document.elementFromPoint(x, y)?.closest('[data-day]') as HTMLElement | null)?.dataset.day ?? null),
+    onStart: (k) => {
+      anchorK.current = k;
+      setSel({ a: k, b: k });
+    },
+    onMove: (k) => {
+      const a = anchorK.current!;
+      setSel(a < k ? { a, b: k } : { a: k, b: a });
+    },
+    onEnd: () => {},
+  });
+  const lastCol = (k: string) => days.indexOf(k) % 7 >= 5;
   return (
-    <div className="cal">
+    <div className={'cal' + (sel ? ' selecting' : '')} ref={calRef}>
       {dow.map((d) => (
         <div key={d} className="h">
           {d}
         </div>
       ))}
       {days.map((k) => {
-        const dayTasks = tasks.filter((x) => x.dueDate === k).sort((a, b) => (a.dueTime ?? '99').localeCompare(b.dueTime ?? '99'));
+        const dayTasks = tasks.filter((x) => onDay(x, k)).sort((a, b) => (a.dueTime ?? '99').localeCompare(b.dueTime ?? '99'));
+        const inSel = !!sel && k >= sel.a && k <= sel.b;
         return (
-          <div key={k} className={'day' + (k === today ? ' today' : '') + (mode === 'month' && !k.startsWith(month) ? ' other' : '')} style={mode === 'week' ? { minHeight: 140 } : undefined}>
+          <div
+            key={k}
+            data-day={k}
+            className={'day' + (k === today ? ' today' : '') + (mode === 'month' && !k.startsWith(month) ? ' other' : '') + (inSel ? ' sel' : '') + (sel?.b === k ? ' has-menu' : '')}
+            style={mode === 'week' ? { minHeight: 140 } : undefined}
+          >
             <div className="n">
               <button className="icon-btn add" aria-label={t('add_task')} onClick={() => openEditor({ kind: 'task', defaults: { dueDate: k } })}>
                 +
@@ -117,20 +149,73 @@ function MonthWeekGrid({ mode, anchor, onDayClick }: { mode: 'week' | 'month'; a
                 return <i key={h.id} title={`${h.icon} ${h.name} ${d.count}/${d.total}`} style={d.complete ? { background: h.color } : { boxShadow: `inset 0 0 0 1.5px ${h.color}` }} />;
               })}
             </div>
-            {dayTasks.slice(0, max).map((x) => (
-              <div key={x.id} className={'ev' + (x.status === 'done' ? ' done' : '')} style={{ borderLeftColor: (x.projectId && projColor.get(x.projectId)) || undefined }} onClick={() => openEditor({ kind: 'task', id: x.id })} title={x.title}>
-                {x.dueTime && <span className="muted">{x.dueTime} </span>}
-                {x.title}
-              </div>
-            ))}
+            {dayTasks.slice(0, max).map((x) => {
+              const cont = startOf(x)! < k;
+              return (
+                <div key={x.id} className={'ev' + (x.status === 'done' ? ' done' : '') + (cont ? ' cont' : '')} style={{ borderLeftColor: (x.projectId && projColor.get(x.projectId)) || undefined }} onClick={() => openEditor({ kind: 'task', id: x.id })} title={x.title}>
+                  {cont ? '↳ ' : x.dueTime ? <span className="muted">{x.dueTime} </span> : null}
+                  {x.title}
+                </div>
+              );
+            })}
             {dayTasks.length > max && (
               <button className="link-title small muted" onClick={() => onDayClick(k)}>
                 +{dayTasks.length - max}
               </button>
             )}
+            {sel?.b === k && (
+              <SelMenu
+                right={lastCol(k)}
+                label={sel.a === sel.b ? shortDate(sel.a, t) : `${shortDate(sel.a, t)} → ${shortDate(sel.b, t)} (${range(sel.a, sel.b).length} ${t('day_unit')})`}
+                onTask={() => openEditor({ kind: 'task', defaults: { startDate: sel.a < sel.b ? sel.a : undefined, dueDate: sel.b } })}
+                onHabit={() => openEditor({ kind: 'habit', defaults: habitDefaults(range(sel.a, sel.b)) })}
+                onClose={() => setSel(null)}
+              />
+            )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function shortDate(k: string, t: ReturnType<typeof useData>['t']) {
+  const d = fromKey(k);
+  return `${d.getDate()} ${t.months[d.getMonth()].slice(0, 3)} ${t.dow[weekdayIndex(k, true)]}`;
+}
+
+/** Seçilen günlerden alışkanlık varsayılanları: birden çok gün seçildiyse o haftanın günleri. */
+function habitDefaults(keys: string[], time?: string) {
+  const wd = [...new Set(keys.map((k) => weekdayIndex(k, true)))].sort();
+  return { reminderTime: time, days: keys.length > 1 && wd.length < 7 ? wd : undefined };
+}
+
+function useEscape(f: () => void, on: boolean) {
+  useEffect(() => {
+    if (!on) return;
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && !editorOpen() && f();
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [on, f]);
+}
+
+/** Seçimin altında açılan menü: seçime art arda görev/alışkanlık eklenebilir; seçim kendiliğinden kaybolmaz. */
+function SelMenu({ label, onTask, onHabit, onClose, right, style }: { label: string; onTask: () => void; onHabit: () => void; onClose: () => void; right?: boolean; style?: React.CSSProperties }) {
+  const { t } = useData();
+  return (
+    <div className={'sel-menu' + (right ? ' right' : '')} style={style} onPointerDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+      <div className="small muted">{label}</div>
+      <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+        <button className="btn sm primary" onClick={onTask}>
+          ＋ {t('sel_task')}
+        </button>
+        <button className="btn sm" onClick={onHabit}>
+          ＋ {t('sel_habit')}
+        </button>
+        <button className="icon-btn" aria-label="✕" title={t('sel_clear')} onClick={onClose}>
+          ✕
+        </button>
+      </div>
     </div>
   );
 }
@@ -171,7 +256,7 @@ function useDayEvents(days: string[]) {
       const evs: Ev[] = [];
       const chips: Chip[] = [];
       for (const x of tasks) {
-        if (x.dueDate !== k) continue;
+        if (!onDay(x, k)) continue;
         const color = (x.projectId && projColor.get(x.projectId)) || 'var(--accent)';
         const open = () => openEditor({ kind: 'task', id: x.id });
         if (x.dueTime) {
@@ -267,6 +352,70 @@ function TimeGrid({ days, onDayClick }: { days: string[]; onDayClick?: (k: strin
   const cols = `44px repeat(${days.length}, minmax(0, 1fr))`;
   const anyChips = days.some((k) => data.get(k)!.chips.length);
 
+  // ---- sürükleyerek seçim ----
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const colRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [sel, setSel] = useState<{ d0: number; d1: number; m0: number; m1: number } | null>(null);
+  const anchor = useRef<{ d: number; m: number } | null>(null);
+  useEffect(() => setSel(null), [days.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEscape(() => setSel(null), !!sel);
+  const minAt = (d: number, y: number, round = false) => {
+    const r = colRefs.current[d]!.getBoundingClientRect();
+    const raw = ((y - r.top) / HOUR) * 60;
+    return Math.max(0, Math.min(24 * 60, (round ? Math.round(raw / 15) : Math.floor(raw / 15)) * 15));
+  };
+  useDragSelect(bodyRef, {
+    isEmpty: (tg) => tg instanceof HTMLElement && tg.classList.contains('tg-col'),
+    pointAt: ({ x, y }) => {
+      const cs = colRefs.current.filter(Boolean) as HTMLDivElement[];
+      if (!cs.length) return null;
+      let d = cs.findIndex((c) => {
+        const r = c.getBoundingClientRect();
+        return x >= r.left && x < r.right;
+      });
+      if (d < 0) d = x < cs[0].getBoundingClientRect().left ? 0 : cs.length - 1;
+      return { d, m: Math.min(24 * 60 - 15, minAt(d, y)) };
+    },
+    onStart: (p) => {
+      anchor.current = p;
+      setSel({ d0: p.d, d1: p.d, m0: p.m, m1: p.m + 15 });
+    },
+    onMove: (p) => {
+      const a = anchor.current!;
+      setSel({ d0: Math.min(a.d, p.d), d1: Math.max(a.d, p.d), m0: Math.min(a.m, p.m), m1: Math.max(a.m, p.m) + 15 });
+    },
+    onEnd: (moved) => {
+      if (moved) return;
+      const a = anchor.current!;
+      const m0 = Math.floor(a.m / 30) * 30;
+      setSel({ d0: a.d, d1: a.d, m0, m1: Math.min(24 * 60, m0 + 60) });
+    },
+  });
+  const resize = (edge: 'top' | 'bottom') => (e: React.PointerEvent) => {
+    if (!sel) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    const d = sel.d0;
+    const mv = (ev: PointerEvent) => {
+      const m = minAt(d, ev.clientY, true);
+      setSel((s) => s && (edge === 'top' ? { ...s, m0: Math.min(m, s.m1 - 15) } : { ...s, m1: Math.max(m, s.m0 + 15) }));
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', mv);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+    };
+    el.addEventListener('pointermove', mv);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+  const selDays = sel ? days.slice(sel.d0, sel.d1 + 1) : [];
+  const selLabel = sel
+    ? `${selDays.length > 1 ? `${t.dow[weekdayIndex(selDays[0], true)]}–${t.dow[weekdayIndex(selDays[selDays.length - 1], true)]} · ` : days.length > 1 ? t.dow[weekdayIndex(selDays[0], true)] + ' · ' : ''}${minToHm(sel.m0)}–${sel.m1 >= 1440 ? '24:00' : minToHm(sel.m1)} (${sel.m1 - sel.m0} ${t('min_short')})`
+    : '';
+
   return (
     <div className="tg">
       {days.length > 1 && (
@@ -296,7 +445,7 @@ function TimeGrid({ days, onDayClick }: { days: string[]; onDayClick?: (k: strin
         </div>
       )}
       <div className="tg-scroll" ref={scroller}>
-        <div className="tg-body" style={{ gridTemplateColumns: cols, height: 24 * HOUR }}>
+        <div className={'tg-body' + (sel ? ' selecting' : '')} ref={bodyRef} style={{ gridTemplateColumns: cols, height: 24 * HOUR }}>
           <div className="tg-gut">
             {Array.from({ length: 24 }, (_, h) => (
               <span key={h} style={{ top: h * HOUR }}>
@@ -304,18 +453,8 @@ function TimeGrid({ days, onDayClick }: { days: string[]; onDayClick?: (k: strin
               </span>
             ))}
           </div>
-          {days.map((k) => (
-            <div
-              key={k}
-              className="tg-col"
-              style={{ backgroundSize: `100% ${HOUR}px` }}
-              onClick={(e) => {
-                if (e.target !== e.currentTarget) return;
-                const y = e.nativeEvent.offsetY;
-                const min = Math.floor((y / HOUR) * 2) * 30;
-                openEditor({ kind: 'task', defaults: { dueDate: k, dueTime: minToHm(min), duration: 60 } });
-              }}
-            >
+          {days.map((k, di) => (
+            <div key={k} className={'tg-col' + (sel && di === sel.d0 ? ' has-menu' : '')} ref={(el) => void (colRefs.current[di] = el)} style={{ backgroundSize: `100% ${HOUR}px` }}>
               {data.get(k)!.evs.map((e) => (
                 <button
                   key={e.id}
@@ -335,6 +474,34 @@ function TimeGrid({ days, onDayClick }: { days: string[]; onDayClick?: (k: strin
                 </button>
               ))}
               {k === today && <div className="tg-now" style={{ top: (nowMin / 60) * HOUR }} />}
+              {sel && di >= sel.d0 && di <= sel.d1 && (
+                <div className="tg-sel" style={{ top: (sel.m0 / 60) * HOUR, height: ((sel.m1 - sel.m0) / 60) * HOUR }}>
+                  {di === sel.d0 && (
+                    <>
+                      <span className="tg-sel-h top" onPointerDown={resize('top')} />
+                      <span className="tg-sel-t">
+                        {minToHm(sel.m0)}–{sel.m1 >= 1440 ? '24:00' : minToHm(sel.m1)}
+                      </span>
+                      <span className="tg-sel-h bottom" onPointerDown={resize('bottom')} />
+                    </>
+                  )}
+                </div>
+              )}
+              {sel && di === sel.d0 && (
+                <SelMenu
+                  right={days.length > 2 && di >= days.length - 2}
+                  style={{ top: (Math.min(sel.m1, 22 * 60) / 60) * HOUR + 6 }}
+                  label={selLabel}
+                  onTask={() =>
+                    openEditor({
+                      kind: 'task',
+                      defaults: { startDate: selDays.length > 1 ? selDays[0] : undefined, dueDate: selDays[selDays.length - 1], dueTime: minToHm(sel.m0), duration: sel.m1 - sel.m0 },
+                    })
+                  }
+                  onHabit={() => openEditor({ kind: 'habit', defaults: habitDefaults(selDays, minToHm(sel.m0)) })}
+                  onClose={() => setSel(null)}
+                />
+              )}
             </div>
           ))}
         </div>

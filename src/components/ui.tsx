@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { isValidElement, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { EMOJIS } from '../lib/actions';
 
 export function Modal({ title, onClose, children, wide = false }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
@@ -23,6 +23,14 @@ export function Modal({ title, onClose, children, wide = false }: { title: strin
 }
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
+  // Düğme grubu (Seg) içeren alanlar <label> olmamalı: etikete tıklamak ilk düğmeye basmış sayılıyordu.
+  if (isValidElement(children) && children.type === Seg)
+    return (
+      <div className="field" role="group" aria-label={label}>
+        <span>{label}</span>
+        {children}
+      </div>
+    );
   return (
     <label className="field">
       <span>{label}</span>

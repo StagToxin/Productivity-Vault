@@ -6,6 +6,8 @@ import { useData } from '../lib/store';
 import type { Habit, Project, Task } from '../lib/types';
 import { openEditor } from './Editors';
 import { Bar, toast } from './ui';
+import { Checklist, PaceBadge, TaskCheckButton, TaskProgressLine, TaskTags } from './TaskBits';
+import { isTargeted, onDay, startOf } from '../lib/tasks';
 
 /** Gün hücresinin rengi: tamamlandıysa tam renk, kısmi ise ilerlemeye göre saydam. */
 export function cellStyle(h: Habit, d: DayInfo | undefined): React.CSSProperties | undefined {
@@ -226,6 +228,7 @@ export function dueInfo(task: Task, today: string, t: ReturnType<typeof useData>
   if (!task.dueDate) return { text: t('no_due'), cls: 'muted' };
   const d = diffDays(task.dueDate, today);
   if (task.status === 'done') return { text: task.dueDate, cls: 'muted' };
+  if (task.startDate && task.startDate > today && task.startDate < task.dueDate) return { text: '🗓 ' + t('starts_in', { n: diffDays(task.startDate, today) }) + ' · ' + t('due_in', { n: d }), cls: 'muted' };
   if (d === 0) return { text: '📅 ' + t('due_today'), cls: '' };
   if (d < 0) return { text: '⚠️ ' + t('overdue_by', { n: -d }), cls: 'bad' };
   return { text: '📅 ' + t('due_in', { n: d }), cls: 'muted' };
@@ -244,12 +247,23 @@ export function TaskCard({ task }: { task: Task }) {
   return (
     <div className="card clickable" onClick={() => openEditor({ kind: 'task', id: task.id })}>
       <div className="card-title">
-        <span>📄</span>
+        <span>{task.milestone ? '◆' : isTargeted(task) ? '🎯' : '📄'}</span>
         <span className="t">{task.title}</span>
       </div>
-      {p && <div className="meta">📌 {p.name}</div>}
-      <div>{statusBadge(task, t)}</div>
+      {p && (
+        <div className="meta">
+          {p.icon} {p.name}
+        </div>
+      )}
+      <div className="row" style={{ gap: 6 }}>
+        {statusBadge(task, t)}
+        <PaceBadge task={task} />
+      </div>
       <div className={'meta ' + due.cls}>{due.text}</div>
+      <div className="meta">
+        <TaskTags task={task} />
+      </div>
+      <TaskProgressLine task={task} color={p?.color} />
       <CompleteButton task={task} />
     </div>
   );
@@ -257,6 +271,7 @@ export function TaskCard({ task }: { task: Task }) {
 
 export function CompleteButton({ task }: { task: Task }) {
   const { t } = useData();
+  if (isTargeted(task)) return <TaskCheckButton task={task} />;
   const done = task.status === 'done';
   return (
     <button
@@ -277,8 +292,14 @@ export function TaskRow({ task }: { task: Task }) {
   const p = projects.find((x) => x.id === task.projectId);
   const due = dueInfo(task, today, t);
   const done = task.status === 'done';
+  const targeted = isTargeted(task);
   return (
     <div className={'task-row' + (done ? ' done' : '')}>
+      {targeted ? (
+        <span className="check round" style={{ fontSize: 13 }} title={t('tk_targeted')}>
+          🎯
+        </span>
+      ) : (
       <button
         className={'check round' + (done ? ' on' : '')}
         aria-label={t('mark_done')}
@@ -289,6 +310,7 @@ export function TaskRow({ task }: { task: Task }) {
       >
         {done ? '✓' : ''}
       </button>
+      )}
       <div className="t clickable" style={{ cursor: 'pointer' }} onClick={() => openEditor({ kind: 'task', id: task.id })}>
         <div className="title">
           {task.priority === 2 && <span className="bad">❗ </span>}
@@ -302,9 +324,13 @@ export function TaskRow({ task }: { task: Task }) {
           )}
           <span className={due.cls}>{due.text}</span>
           {task.reminderAt && <span>🔔</span>}
+          <TaskTags task={task} />
+          <PaceBadge task={task} />
         </div>
+        <TaskProgressLine task={task} color={p?.color} />
+        <Checklist task={task} />
       </div>
-      {statusBadge(task, t)}
+      {targeted ? <TaskCheckButton task={task} compact /> : statusBadge(task, t)}
     </div>
   );
 }
@@ -316,13 +342,13 @@ export function filterTasks(tasks: Task[], tab: TaskTab, today: string): Task[] 
   const byDue = (a: Task, b: Task) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || b.priority - a.priority;
   switch (tab) {
     case 'today':
-      return open.filter((t) => t.dueDate === today).sort(byDue);
+      return open.filter((t) => onDay(t, today)).sort(byDue);
     case 'yesterday':
       return tasks.filter((t) => t.dueDate === addDays(today, -1)).sort(byDue);
     case 'overdue':
       return open.filter((t) => t.dueDate && t.dueDate < today).sort(byDue);
     case 'upcoming':
-      return open.filter((t) => t.dueDate && t.dueDate > today).sort(byDue);
+      return open.filter((t) => t.dueDate && t.dueDate > today && !onDay(t, today)).sort(byDue);
     case 'unrelated':
       return open.filter((t) => !t.projectId).sort(byDue);
     case 'inbox':
@@ -346,7 +372,7 @@ export function ProjectCard({ p }: { p: Project }) {
   const { tasks, today, t } = useData();
   const i = projectInfo(p, tasks, today);
   return (
-    <div className="card clickable" onClick={() => openEditor({ kind: 'project', id: p.id })}>
+    <div className="card clickable" onClick={() => openEditor({ kind: 'projectDetail', id: p.id })}>
       <div className="card-title">
         <span>{p.icon}</span>
         <span className="t">{p.name}</span>

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Productivity Vault",
+  "productName": "Verim Asistani",
   "version": "../package.json",
   "identifier": "com.productivityvault.app",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Productivity Vault",
+        "title": "Verim Asistanı",
         "width": 1360,
         "height": 900,
         "minWidth": 380,
@@ -44,7 +44,8 @@
           "Turkish",
           "English"
         ],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installerHooks": "./windows/hooks.nsh"
       }
     }
   },

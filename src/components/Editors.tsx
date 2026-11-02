@@ -1,43 +1,67 @@
 import { useState, useSyncExternalStore } from 'react';
-import { deleteHabit, deleteProject, deleteTask, HABIT_COLORS, saveHabit, saveProject, saveTask, SLOT_PRESETS } from '../lib/actions';
+import { deleteHabit, deleteProject, HABIT_COLORS, saveHabit, saveProject, SLOT_PRESETS } from '../lib/actions';
 import { uid } from '../lib/db';
 import { HabitDayEditor, HabitDetail } from './HabitViews';
 import { useData } from '../lib/store';
-import type { Habit, HabitSlot, Priority, Project, Task } from '../lib/types';
+import type { Habit, HabitSlot, Project, Task } from '../lib/types';
+import { TaskEditor } from './TaskEditor';
+import { ProjectDetail } from './ProjectDetail';
 import { EmojiPicker, Field, Modal, Seg, Swatches } from './ui';
 
 type EditorState =
-  | { kind: 'habit'; id?: string }
+  | { kind: 'habit'; id?: string; defaults?: Partial<Habit> }
   | { kind: 'task'; id?: string; defaults?: Partial<Task> }
   | { kind: 'project'; id?: string }
   | { kind: 'habitDetail'; id: string }
   | { kind: 'habitDay'; id: string; date: string }
+  | { kind: 'projectDetail'; id: string; tab?: 'tasks' | 'calendar' | 'plan' }
   | null;
 
+// Editörler üst üste açılabilir (ör. proje detayından görev düzenleme): kapanınca bir öncekine dönülür.
+let stack: NonNullable<EditorState>[] = [];
 let state: EditorState = null;
 const subs = new Set<() => void>();
-export function openEditor(s: EditorState) {
-  state = s;
+const emit = () => {
+  state = stack[stack.length - 1] ?? null;
   subs.forEach((f) => f());
+};
+export function openEditor(s: EditorState) {
+  if (!s) stack = [];
+  else if (s.kind === 'projectDetail' || s.kind === 'habitDetail' || !stack.length) stack = [s];
+  else if (stack[stack.length - 1].kind === 'projectDetail' || stack[stack.length - 1].kind === 'habitDetail') stack = [...stack, s];
+  else stack = [...stack.slice(0, -1), s];
+  emit();
 }
-const close = () => openEditor(null);
+/** Üstteki editörü kapat (altta proje/alışkanlık detayı varsa ona dön). */
+export function closeEditor() {
+  stack = stack.slice(0, -1);
+  emit();
+}
+const close = closeEditor;
+/** Takvim seçimi gibi yerler için: editör kapandığında haber al. */
+export function onEditorChange(f: () => void) {
+  subs.add(f);
+  return () => subs.delete(f);
+}
+export const editorOpen = () => state !== null;
 
 export function EditorHost() {
   const s = useSyncExternalStore((f) => (subs.add(f), () => subs.delete(f)), () => state);
   if (!s) return null;
-  if (s.kind === 'habit') return <HabitEditor key={s.id ?? 'new'} id={s.id} />;
-  if (s.kind === 'task') return <TaskEditor key={s.id ?? 'new'} id={s.id} defaults={s.defaults} />;
+  if (s.kind === 'habit') return <HabitEditor key={s.id ?? 'new'} id={s.id} defaults={s.defaults} />;
+  if (s.kind === 'task') return <TaskEditor key={s.id ?? 'new'} id={s.id} defaults={s.defaults} onClose={close} />;
+  if (s.kind === 'projectDetail') return <ProjectDetail key={s.id} id={s.id} tab={s.tab} onClose={close} />;
   if (s.kind === 'habitDetail') return <HabitDetail key={s.id} id={s.id} />;
   if (s.kind === 'habitDay') return <HabitDayEditor key={s.id + s.date} id={s.id} date={s.date} />;
   return <ProjectEditor key={s.id ?? 'new'} id={s.id} />;
 }
 
-function HabitEditor({ id }: { id?: string }) {
+function HabitEditor({ id, defaults }: { id?: string; defaults?: Partial<Habit> }) {
   const { habits, t, prefs } = useData();
   const cur = habits.find((h) => h.id === id);
-  const [f, setF] = useState<Partial<Habit>>(cur ?? { name: '', icon: '🎯', color: HABIT_COLORS[habits.length % HABIT_COLORS.length], weeklyTarget: 7 });
+  const [f, setF] = useState<Partial<Habit>>(cur ?? { name: '', icon: '🎯', color: HABIT_COLORS[habits.length % HABIT_COLORS.length], weeklyTarget: 7, ...defaults });
   const [multi, setMulti] = useState((cur?.slots?.length ?? 0) > 0);
-  const [specific, setSpecific] = useState((cur?.days?.length ?? 0) > 0);
+  const [specific, setSpecific] = useState(((cur ?? defaults)?.days?.length ?? 0) > 0);
   const set = (p: Partial<Habit>) => setF((x) => ({ ...x, ...p }));
   const slots = f.slots ?? [];
   const setSlot = (i: number, p: Partial<HabitSlot>) => set({ slots: slots.map((s, j) => (j === i ? { ...s, ...p } : s)) });
@@ -163,85 +187,6 @@ function HabitEditor({ id }: { id?: string }) {
   );
 }
 
-function TaskEditor({ id, defaults }: { id?: string; defaults?: Partial<Task> }) {
-  const { tasks, projects, t, today } = useData();
-  const cur = tasks.find((x) => x.id === id);
-  const [f, setF] = useState<Partial<Task>>(cur ?? { title: '', notes: '', priority: 1, status: 'todo', dueDate: today, ...defaults });
-  const set = (p: Partial<Task>) => setF((x) => ({ ...x, ...p }));
-  const submit = async () => {
-    if (!f.title?.trim()) return;
-    await saveTask({ ...f, title: f.title.trim(), dueDate: f.dueDate || undefined, dueTime: f.dueTime || undefined, reminderAt: f.reminderAt || undefined, projectId: f.projectId || undefined });
-    close();
-  };
-  return (
-    <Modal title={cur ? t('edit') : t('add_task')} onClose={close}>
-      <form onSubmit={(e) => (e.preventDefault(), submit())}>
-        <Field label={t('title')}>
-          <input className="input" autoFocus value={f.title} onChange={(e) => set({ title: e.target.value })} />
-        </Field>
-        <div className="row">
-          <Field label={t('project')}>
-            <select className="input" value={f.projectId ?? ''} onChange={(e) => set({ projectId: e.target.value || undefined })}>
-              <option value="">{t('none')}</option>
-              {projects.filter((p) => p.status === 'active' || p.id === f.projectId).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.icon} {p.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label={t('due_date')}>
-            <input className="input" type="date" value={f.dueDate ?? ''} onChange={(e) => set({ dueDate: e.target.value })} />
-          </Field>
-        </div>
-        <div className="row">
-          <Field label={t('due_time')}>
-            <input className="input" type="time" value={f.dueTime ?? ''} onChange={(e) => set({ dueTime: e.target.value })} />
-          </Field>
-          <Field label={t('duration')}>
-            <select className="input" value={f.duration ?? 30} onChange={(e) => set({ duration: Number(e.target.value) })}>
-              {[15, 30, 45, 60, 90, 120, 180, 240].map((m) => (
-                <option key={m} value={m}>
-                  {m >= 60 ? `${m / 60} ${t('hours')}` : `${m} ${t('minutes')}`}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-        <div className="row">
-          <Field label={t('priority')}>
-            <Seg<Priority> value={f.priority ?? 1} options={[0, 1, 2].map((n) => ({ v: n as Priority, l: t(`prio_${n}` as 'prio_0') }))} onChange={(priority) => set({ priority })} />
-          </Field>
-          <Field label={t('status')}>
-            <select className="input" value={f.status} onChange={(e) => set({ status: e.target.value as Task['status'], doneAt: e.target.value === 'done' ? Date.now() : undefined })}>
-              <option value="todo">{t('not_started')}</option>
-              <option value="doing">{t('in_progress')}</option>
-              <option value="done">{t('done')}</option>
-            </select>
-          </Field>
-        </div>
-        <Field label={t('reminder')}>
-          <input className="input" type="datetime-local" value={f.reminderAt ?? ''} onChange={(e) => set({ reminderAt: e.target.value })} />
-        </Field>
-        <Field label={t('notes')}>
-          <textarea className="input" value={f.notes} onChange={(e) => set({ notes: e.target.value })} />
-        </Field>
-        <div className="actions">
-          {cur && (
-            <button type="button" className="btn danger left" onClick={async () => confirm(t('confirm_delete')) && (await deleteTask(cur.id), close())}>
-              {t('delete')}
-            </button>
-          )}
-          <button type="button" className="btn" onClick={close}>
-            {t('cancel')}
-          </button>
-          <button className="btn primary">{t('save')}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
 function ProjectEditor({ id }: { id?: string }) {
   const { projects, t } = useData();
   const cur = projects.find((p) => p.id === id);
@@ -249,7 +194,7 @@ function ProjectEditor({ id }: { id?: string }) {
   const set = (p: Partial<Project>) => setF((x) => ({ ...x, ...p }));
   const submit = async () => {
     if (!f.name?.trim()) return;
-    await saveProject({ ...f, name: f.name.trim(), deadline: f.deadline || undefined });
+    await saveProject({ ...f, name: f.name.trim(), start: f.start || undefined, deadline: f.deadline || undefined });
     close();
   };
   return (
@@ -264,9 +209,14 @@ function ProjectEditor({ id }: { id?: string }) {
         <Field label={t('color')}>
           <Swatches value={f.color ?? HABIT_COLORS[1]} colors={HABIT_COLORS} onChange={(color) => set({ color })} />
         </Field>
-        <Field label={t('deadline')}>
-          <input className="input" type="date" value={f.deadline ?? ''} onChange={(e) => set({ deadline: e.target.value })} />
-        </Field>
+        <div className="row">
+          <Field label={t('start_date')}>
+            <input className="input" type="date" value={f.start ?? ''} max={f.deadline} onChange={(e) => set({ start: e.target.value })} />
+          </Field>
+          <Field label={t('deadline')}>
+            <input className="input" type="date" value={f.deadline ?? ''} onChange={(e) => set({ deadline: e.target.value })} />
+          </Field>
+        </div>
         <div className="actions">
           {cur && (
             <button type="button" className="btn danger left" onClick={async () => confirm(t('confirm_delete')) && (await deleteProject(cur.id), close())}>

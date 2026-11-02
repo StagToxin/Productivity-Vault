@@ -1,7 +1,8 @@
 // Uygulamadaki tüm yazma işlemleri burada toplanır.
 import { db, patch, put, softDelete, uid } from './db';
-import { addDays, fromKey, todayKey } from './dates';
-import type { FocusSession, Habit, HabitLog, Prefs, Project, Task, WidgetId, WidgetPref } from './types';
+import { addDays, dayKeyOfTs, fromKey, todayKey } from './dates';
+import { canCheck, checksOf, isTargeted, nextOccurrence, type Scheduled } from './tasks';
+import type { FocusPlan, FocusSession, Habit, HabitLog, Prefs, Project, Task, TaskCheck, WidgetId, WidgetPref } from './types';
 
 export const ACCENTS = ['#f08c3a', '#4c8dff', '#2fb380', '#e0567a', '#9b6bff', '#e5b931', '#26b5c9', '#ff6b4a'];
 // Tema zemin renkleri (gece / gündüz). Diğer yüzey renkleri bunlardan türetilir.
@@ -19,7 +20,7 @@ export const SLOT_PRESETS: { key: string; icon: string; slots: { name: string; t
 export const HABIT_COLORS = ['#e8932f', '#3d82f0', '#e07020', '#d6488e', '#2fb380', '#9b6bff', '#d9b02a', '#26b5c9', '#e5484d', '#8a8f98'];
 export const EMOJIS = ['💻', '📖', '🏋️', '🧴', '🥗', '💧', '🧘', '🏃', '🎧', '✍️', '🎨', '🎸', '🌙', '🧹', '💊', '🚭', '📚', '🧠', '🎯', '🌱', '📝', '🎬', '🚀', '💡', '📌', '🛠️', '📱', '💰', '🗣️', '🐶'];
 
-export const DEFAULT_WIDGETS: WidgetId[] = ['performance', 'streak', 'habits', 'habitGrid', 'actions', 'tasks', 'focus', 'projects', 'habitStats', 'calendar'];
+export const DEFAULT_WIDGETS: WidgetId[] = ['performance', 'streak', 'countdown', 'habits', 'habitGrid', 'actions', 'tasks', 'focus', 'projects', 'weekly', 'habitStats', 'calendar'];
 
 export function defaultPrefs(): Omit<Prefs, 'updatedAt' | 'dirty' | 'deleted'> {
   return {
@@ -160,6 +161,7 @@ export async function saveTask(t: Partial<Task> & { title: string }) {
     title: t.title,
     notes: t.notes ?? '',
     projectId: t.projectId,
+    startDate: t.startDate,
     dueDate: t.dueDate,
     reminderAt: t.reminderAt,
     dueTime: t.dueTime,
@@ -167,15 +169,119 @@ export async function saveTask(t: Partial<Task> & { title: string }) {
     status: t.status ?? 'todo',
     priority: t.priority ?? 1,
     createdAt: Date.now(),
+    target: t.target,
+    rule: t.rule,
+    repeat: t.repeat,
+    checklist: t.checklist,
+    phase: t.phase,
+    milestone: t.milestone,
   });
   return row.id;
 }
 
+/**
+ * Görev durumunu değiştirir. Tekrarlayan görev tamamlanınca bir sonraki oluşturulur;
+ * geri alınırsa (henüz dokunulmamışsa) o da kaldırılır.
+ */
 export async function setTaskStatus(id: string, status: Task['status']) {
+  const cur = await db.tasks.get(id);
   await patch<Task>('tasks', id, { status, doneAt: status === 'done' ? Date.now() : undefined });
+  if (!cur?.repeat) return;
+  const next = nextOccurrence(cur);
+  if (!next) return;
+  const existing = await db.tasks.get(next.id);
+  if (status === 'done' && cur.status !== 'done') {
+    if (!existing || existing.deleted) await put<Task>('tasks', { ...next, deleted: 0 });
+  } else if (status !== 'done' && cur.status === 'done' && existing && !existing.deleted && existing.status === 'todo') {
+    const touched = await db.taskChecks.where('taskId').equals(next.id).count();
+    if (!touched) await softDelete('tasks', next.id);
+  }
 }
 
-export const deleteTask = (id: string) => softDelete('tasks', id);
+// ---------- Hedefli görev tikleri ----------
+async function myChecks(taskId: string) {
+  return checksOf(await db.taskChecks.where('taskId').equals(taskId).toArray(), taskId);
+}
+
+/** Hedefe ulaşınca görevi bitirir; tik geri alınınca yeniden açar. */
+async function syncTargetStatus(taskId: string) {
+  const t = await db.tasks.get(taskId);
+  if (!t || !isTargeted(t)) return;
+  const n = (await myChecks(taskId)).length;
+  if (n >= t.target! && t.status !== 'done') await setTaskStatus(taskId, 'done');
+  else if (n < t.target! && t.status === 'done') await setTaskStatus(taskId, n > 0 ? 'doing' : 'todo');
+  else if (n > 0 && n < t.target! && t.status === 'todo') await patch<Task>('tasks', taskId, { status: 'doing' });
+}
+
+export type CheckResult = { ok: true; check: TaskCheck; count: number; target: number; completed: boolean } | { ok: false; block: Exclude<ReturnType<typeof canCheck>, { ok: true }> };
+
+/** Hedefli göreve tik atar (şartlar kontrol edilir). */
+export async function checkTask(taskId: string, opts: { focusId?: string; force?: boolean } = {}): Promise<CheckResult> {
+  const t = await db.tasks.get(taskId);
+  if (!t) throw new Error('task');
+  const mine = await myChecks(taskId);
+  const focus = await db.focus.where('date').aboveOrEqual(addDays(todayKey(), -400)).toArray();
+  const at = Date.now();
+  const block = canCheck(t, mine, focus, at, { ignoreFocus: opts.force || !!opts.focusId });
+  if (!block.ok && !opts.force) return { ok: false, block };
+  const row = await put<TaskCheck>('taskChecks', { id: uid(), taskId, at, date: dayKeyOfTs(at), focusId: opts.focusId });
+  await syncTargetStatus(taskId);
+  const count = mine.length + 1;
+  return { ok: true, check: row, count, target: t.target ?? 1, completed: count >= (t.target ?? 1) };
+}
+
+export async function uncheckTask(checkId: string) {
+  const c = await db.taskChecks.get(checkId);
+  if (!c) return;
+  await softDelete('taskChecks', checkId);
+  await syncTargetStatus(c.taskId);
+}
+
+/** Son tiki geri alır. */
+export async function undoLastCheck(taskId: string) {
+  const mine = await myChecks(taskId);
+  const last = mine[mine.length - 1];
+  if (last) await uncheckTask(last.id);
+}
+
+/** Pomodoro bitince: görevde odak şartı varsa ve süre dolduysa otomatik tik atar. */
+export async function autoCheckFromFocus(taskId: string, focusId: string): Promise<CheckResult | null> {
+  const t = await db.tasks.get(taskId);
+  if (!t || t.deleted || !isTargeted(t) || !t.rule?.focusMin) return null;
+  const mine = await myChecks(taskId);
+  const focus = await db.focus.where('date').aboveOrEqual(addDays(todayKey(), -400)).toArray();
+  const block = canCheck(t, mine, focus, Date.now());
+  if (!block.ok) return null;
+  return checkTask(taskId, { focusId });
+}
+
+export async function toggleChecklistItem(taskId: string, itemId: string) {
+  const t = await db.tasks.get(taskId);
+  if (!t?.checklist) return;
+  await patch<Task>('tasks', taskId, { checklist: t.checklist.map((c) => (c.id === itemId ? { ...c, done: !c.done } : c)) });
+}
+
+/** Hızlı plandan toplu görev oluşturur. */
+export async function createPlannedTasks(projectId: string, items: Scheduled[]) {
+  for (const it of items) {
+    await saveTask({
+      title: it.title,
+      projectId,
+      startDate: it.start < it.end ? it.start : undefined,
+      dueDate: it.end,
+      target: it.target,
+      phase: it.phase,
+      milestone: it.milestone ? 1 : undefined,
+      priority: it.milestone ? 2 : 1,
+    });
+  }
+}
+
+export async function deleteTask(id: string) {
+  const checks = await db.taskChecks.where('taskId').equals(id).toArray();
+  for (const c of checks) if (!c.deleted) await softDelete('taskChecks', c.id);
+  await softDelete('tasks', id);
+}
 
 // ---------- Projeler ----------
 export async function saveProject(p: Partial<Project> & { name: string }) {
@@ -188,6 +294,7 @@ export async function saveProject(p: Partial<Project> & { name: string }) {
     name: p.name,
     icon: p.icon ?? '📌',
     color: p.color ?? HABIT_COLORS[1],
+    start: p.start,
     deadline: p.deadline,
     status: 'active',
     createdAt: Date.now(),
@@ -203,12 +310,27 @@ export async function deleteProject(id: string) {
 }
 
 // ---------- Odak ----------
-export async function logFocus(minutes: number, opts: { habitId?: string; taskId?: string } = {}) {
-  if (minutes <= 0) return;
+export async function logFocus(minutes: number, opts: { habitId?: string; taskId?: string } = {}): Promise<{ id: string; check: CheckResult | null } | null> {
+  if (minutes <= 0) return null;
+  const id = uid();
   await put<FocusSession>('focus', {
-    id: uid(), start: Date.now() - minutes * 60000, minutes, habitId: opts.habitId, taskId: opts.taskId, date: todayKey(),
+    id, start: Date.now() - minutes * 60000, minutes, habitId: opts.habitId, taskId: opts.taskId, date: todayKey(),
   });
   if (opts.habitId) await addHabitMinutes(opts.habitId, minutes);
+  const check = opts.taskId ? await autoCheckFromFocus(opts.taskId, id) : null;
+  return { id, check };
+}
+
+// ---------- Odak planları ----------
+export async function saveFocusPlan(plan: FocusPlan) {
+  const cur = (await db.prefs.get('prefs'))?.focusPlans ?? [];
+  const list = cur.some((p) => p.id === plan.id) ? cur.map((p) => (p.id === plan.id ? plan : p)) : [...cur, plan];
+  await updatePrefs({ focusPlans: list });
+}
+
+export async function deleteFocusPlan(id: string) {
+  const cur = (await db.prefs.get('prefs'))?.focusPlans ?? [];
+  await updatePrefs({ focusPlans: cur.filter((p) => p.id !== id) });
 }
 
 // ---------- Örnek veri ----------

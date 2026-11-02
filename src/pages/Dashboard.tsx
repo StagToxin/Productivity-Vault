@@ -6,18 +6,21 @@ import { filterTasks, HabitCard, HabitGridCard, ProjectCard, TaskCard, type Task
 import { CalendarModeSeg, CalendarNav, CalendarView, useCalendarState } from '../components/Calendar';
 import { openEditor } from '../components/Editors';
 import { useMissed } from '../components/HabitViews';
+import { CountdownWidget, WeeklyWidget } from '../components/DashWidgets';
 import { Bar, useMedia } from '../components/ui';
 import { DEFAULT_WIDGETS, reorderSubset, updatePrefs } from '../lib/actions';
 import { addDays, fromKey, isoWeek, startOfWeek } from '../lib/dates';
 import { habitStats } from '../lib/logic';
 import { useData } from '../lib/store';
-import { timer, useTimer } from '../lib/timer';
+import { fmtClock, timer, useTimer } from '../lib/timer';
+import { buildPlan } from '../lib/plan';
+import { segLabel } from '../components/MiniTimer';
 import type { WidgetId, WidgetPref } from '../lib/types';
 import type { Page } from '../App';
 
-const NARROW: WidgetId[] = ['performance', 'streak', 'actions', 'habitStats', 'focus'];
+const NARROW: WidgetId[] = ['performance', 'streak', 'countdown', 'actions', 'habitStats', 'focus'];
 const ICONS: Record<WidgetId, string> = {
-  performance: '📊', streak: '🔥', actions: '⚡', habits: '📅', habitGrid: '☑️', tasks: '📁', projects: '🗂', calendar: '🗓', habitStats: '✅', focus: '⏱️',
+  performance: '📊', streak: '🔥', actions: '⚡', habits: '📅', habitGrid: '☑️', tasks: '📁', projects: '🗂', calendar: '🗓', habitStats: '✅', focus: '⏱️', countdown: '⏳', weekly: '🧾',
 };
 
 export default function Dashboard({ go }: { go: (p: Page) => void }) {
@@ -65,7 +68,7 @@ export default function Dashboard({ go }: { go: (p: Page) => void }) {
 
   return (
     <div>
-      <div className="page-icon">🔥</div>
+      <div className="page-icon"><img src="icon.svg" alt="" style={{ width: 44, height: 44, borderRadius: 11 }} /></div>
       <div className="page-head">
         <h1>{t('appName')}</h1>
         <div className="grow" />
@@ -153,6 +156,10 @@ function Widget({ id, go }: { id: WidgetId; go: (p: Page) => void }) {
       return <HabitStatsWidget />;
     case 'focus':
       return <FocusWidget go={go} />;
+    case 'countdown':
+      return <CountdownWidget />;
+    case 'weekly':
+      return <WeeklyWidget />;
   }
 }
 
@@ -263,7 +270,7 @@ function QuickActions({ go }: { go: (p: Page) => void }) {
     [t('add_task'), () => openEditor({ kind: 'task' })],
     [t('add_project'), () => openEditor({ kind: 'project' })],
     [t('add_habit'), () => openEditor({ kind: 'habit' })],
-    [t('start_focus'), () => (timer.start(), go('focus'))],
+    [t('start_focus'), () => (timer.setMode('plan'), go('focus'))],
   ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -294,7 +301,8 @@ function HabitsWidget({ grid }: { grid: boolean }) {
 function TasksWidget() {
   const { tasks, today, t } = useData();
   const [tab, setTab] = useState<TaskTab>('today');
-  const tabs: TaskTab[] = ['today', 'yesterday', 'overdue', 'unrelated', 'inbox'];
+  // "Yaklaşan" olmadan, tarihi ileride olan (ör. projeye bağlı) görevler panoda hiçbir sekmede görünmüyordu.
+  const tabs: TaskTab[] = ['today', 'overdue', 'upcoming', 'inbox', 'unrelated', 'yesterday'];
   const list = filterTasks(tasks, tab, today);
   return (
     <>
@@ -392,22 +400,28 @@ function HabitStatsWidget() {
 }
 
 function FocusWidget({ go }: { go: (p: Page) => void }) {
-  const { t, focus, today } = useData();
+  const { t, focus, today, prefs } = useData();
   const tm = useTimer();
   const mins = focus.filter((f) => f.date === today).reduce((s, f) => s + f.minutes, 0);
-  const mm = String(Math.floor(tm.left / 60000)).padStart(2, '0');
-  const ss = String(Math.floor((tm.left % 60000) / 1000)).padStart(2, '0');
-  const phaseLabel = tm.phase === 'focus' ? t('focus') : tm.phase === 'short' ? t('short_break') : t('long_break');
+  const sw = tm.mode === 'stopwatch';
+  const plans = prefs.focusPlans ?? [];
+  const busy = sw ? !!tm.swStart || tm.sw > 0 : tm.active;
   return (
     <div className="card" style={{ alignItems: 'center', textAlign: 'center' }}>
-      <div className="small muted">{phaseLabel}</div>
-      <div style={{ fontSize: 34, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
-        {mm}:{ss}
-      </div>
+      <div className="small muted">{segLabel(tm, t)}</div>
+      <div style={{ fontSize: 34, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{sw ? fmtClock(tm.sw) : tm.active ? fmtClock(tm.left) : '--:--'}</div>
       <div className="row" style={{ justifyContent: 'center' }}>
-        <button className="btn primary sm" onClick={() => (tm.running ? timer.pause() : timer.start())}>
-          {tm.running ? '⏸ ' + t('pause') : '▶ ' + t('start')}
-        </button>
+        {busy ? (
+          <button className="btn primary sm" onClick={() => ((sw ? tm.swStart : tm.running) ? timer.pause() : timer.resume())}>
+            {(sw ? tm.swStart : tm.running) ? '⏸ ' + t('pause') : '▶ ' + t('resume')}
+          </button>
+        ) : (
+          plans.slice(0, 2).map((p) => (
+            <button key={p.id} className="btn primary sm" onClick={() => timer.startPlan(buildPlan(p), { name: p.name, autoNext: p.autoNext, taskId: p.taskId, habitId: p.habitId })}>
+              ▶ {p.name}
+            </button>
+          ))
+        )}
         <button className="btn sm" onClick={() => go('focus')}>
           ⤢
         </button>
@@ -418,4 +432,3 @@ function FocusWidget({ go }: { go: (p: Page) => void }) {
     </div>
   );
 }
-

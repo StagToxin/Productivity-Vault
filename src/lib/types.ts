@@ -43,11 +43,30 @@ export interface HabitLog extends SyncFields {
 export type TaskStatus = 'todo' | 'doing' | 'done';
 export type Priority = 0 | 1 | 2; // düşük, orta, yüksek
 
+/** Hedefli görevde tik şartları (hepsi isteğe bağlı). */
+export interface TaskRule {
+  gapHours?: number; // iki tik arasında en az bu kadar saat (1–24)
+  perDay?: boolean; // takvim günü başına en fazla 1 tik
+  focusMin?: number; // tik için göreve bağlı en az bu kadar dakikalık odak gerekir (dolunca otomatik tik)
+}
+
+export interface TaskRepeat {
+  every: number; // 1..
+  unit: 'day' | 'week' | 'month';
+}
+
+export interface CheckItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 export interface Task extends SyncFields {
   title: string;
   notes: string;
   projectId?: string;
-  dueDate?: string; // YYYY-MM-DD
+  startDate?: string; // YYYY-MM-DD — birden çok güne yayılan görevlerde başlangıç
+  dueDate?: string; // YYYY-MM-DD — son gün
   reminderAt?: string; // ISO local "YYYY-MM-DDTHH:MM"
   dueTime?: string; // "HH:MM" — takvimin saat görünümünde yerleşim
   duration?: number; // dakika
@@ -55,12 +74,28 @@ export interface Task extends SyncFields {
   priority: Priority;
   doneAt?: number;
   createdAt: number;
+  target?: number; // hedefli görev: bu kadar tik atılınca biter (2+)
+  rule?: TaskRule;
+  repeat?: TaskRepeat; // tekrarlayan görev: bitince bir sonraki oluşturulur
+  seriesId?: string; // tekrarlayan görev zincirinin kimliği
+  checklist?: CheckItem[]; // alt adımlar
+  phase?: string; // proje planında aşama başlığı
+  milestone?: 0 | 1; // tek günlük kilometre taşı
+}
+
+/** Hedefli görevde atılan her tik ayrı kayıt — iki cihazda çevrimdışı tik atılsa bile birbirini ezmez. */
+export interface TaskCheck extends SyncFields {
+  taskId: string;
+  at: number; // ms
+  date: string; // YYYY-MM-DD (gün başlangıç saatine göre)
+  focusId?: string; // pomodoro ile otomatik atıldıysa
 }
 
 export interface Project extends SyncFields {
   name: string;
   icon: string;
   color: string;
+  start?: string; // planın başlangıcı
   deadline?: string;
   status: 'active' | 'done';
   createdAt: number;
@@ -93,7 +128,26 @@ export type WidgetId =
   | 'projects'
   | 'calendar'
   | 'habitStats'
-  | 'focus';
+  | 'focus'
+  | 'countdown'
+  | 'weekly';
+
+/** Önceden hazırlanan odak planı (ör. 3 saat, 45 dk dersler, 10 dk mola, 3 derste bir 25 dk uzun mola). */
+export interface FocusPlan {
+  id: string;
+  name: string;
+  totalMin: number; // toplam süre
+  countBreaks: boolean; // true: toplam süreye molalar dahil · false: net çalışma süresi
+  blockMin: number; // ders süresi (20–60)
+  shortBreak: number; // 0 = kısa mola yok
+  longBreak: number; // 0 = uzun mola yok
+  longEvery: number; // kaç derste bir uzun mola
+  noBreaks: boolean; // tek parça, molasız
+  equalize: boolean; // süre tam bölünmezse dersleri eşitle
+  autoNext: boolean; // bir bölüm bitince sonrakini otomatik başlat
+  taskId?: string;
+  habitId?: string;
+}
 
 export interface Prefs extends SyncFields {
   theme: ThemeMode;
@@ -113,7 +167,9 @@ export interface Prefs extends SyncFields {
   lightTo: number;
   widgets: WidgetPref[];
   displayName: string;
+  focusPlans?: FocusPlan[];
+  miniTimer?: boolean; // masaüstü: pomodoro başlayınca küçük pencere aç
 }
 
-export type TableName = 'habits' | 'habitLogs' | 'tasks' | 'projects' | 'focus' | 'prefs';
-export const SYNC_TABLES: TableName[] = ['habits', 'habitLogs', 'tasks', 'projects', 'focus', 'prefs'];
+export type TableName = 'habits' | 'habitLogs' | 'tasks' | 'projects' | 'focus' | 'prefs' | 'taskChecks';
+export const SYNC_TABLES: TableName[] = ['habits', 'habitLogs', 'tasks', 'projects', 'focus', 'prefs', 'taskChecks'];

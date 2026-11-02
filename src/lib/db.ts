@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { FocusSession, Habit, HabitLog, Prefs, Project, SyncFields, TableName, Task } from './types';
+import type { FocusSession, Habit, HabitLog, Prefs, Project, SyncFields, TableName, Task, TaskCheck } from './types';
 
 export interface MetaRow {
   key: string;
@@ -13,6 +13,7 @@ class VaultDB extends Dexie {
   projects!: Table<Project, string>;
   focus!: Table<FocusSession, string>;
   prefs!: Table<Prefs, string>;
+  taskChecks!: Table<TaskCheck, string>;
   meta!: Table<MetaRow, string>;
 
   constructor() {
@@ -27,6 +28,8 @@ class VaultDB extends Dexie {
       prefs: 'id, dirty',
       meta: 'key',
     });
+    // v1.3: hedefli görev tikleri
+    this.version(2).stores({ taskChecks: 'id, dirty, taskId' });
   }
 }
 

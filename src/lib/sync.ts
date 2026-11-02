@@ -103,8 +103,16 @@ async function push(): Promise<number> {
   return sent;
 }
 
+// Yeni bir tablo eklendiğinde artır: eski sürüm o tablonun kayıtlarını atlayıp imleci ilerletmiş olabilir,
+// bu yüzden güncellemeden sonra bir kez baştan çekilir (uygulama idempotent olduğu için güvenli).
+export const SYNC_SCHEMA = 2;
+
 async function pull(): Promise<number> {
   const client = supa()!;
+  if ((await getMeta<number>('syncSchema', 1)) < SYNC_SCHEMA) {
+    await setMeta('pullCursor', '1970-01-01T00:00:00Z');
+    await setMeta('syncSchema', SYNC_SCHEMA);
+  }
   let cursor = await getMeta<string>('pullCursor', '1970-01-01T00:00:00Z');
   // Eşzamanlı commit'leri kaçırmamak için 5 sn geriden başla (uygulama idempotent).
   const start = new Date(new Date(cursor).getTime() - 5000).toISOString();

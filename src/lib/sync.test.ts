@@ -38,7 +38,7 @@ vi.mock('./supabase', () => ({ supa: () => fakeClient, getSupaConfig: () => ({ u
 
 const { db, put, patch } = await import('./db');
 const { syncNow, wipeLocal } = await import('./sync');
-const { saveTask, toggleHabit, saveHabit } = await import('./actions');
+const { saveTask, toggleHabit, saveHabit, checkTask } = await import('./actions');
 
 beforeEach(async () => {
   server.clear();
@@ -96,5 +96,27 @@ describe('sync end-to-end', () => {
     await syncNow();
     expect(server.size).toBe(0);
     expect(await db.tasks.count()).toBe(0);
+  });
+
+  it('target-task checks from two offline devices merge instead of overwriting', async () => {
+    const id = await saveTask({ title: 'Vize', dueDate: '2099-01-01', target: 3 });
+    await syncNow();
+    await checkTask(id); // bu cihaz
+    // diğer cihazın tiki sunucuda
+    server.set('taskChecks:other', { tbl: 'taskChecks', id: 'other', data: { id: 'other', taskId: id, at: Date.now() - 1000, date: '2026-11-01' }, updated_at: Date.now(), deleted: false, server_ts: ts() });
+    await syncNow();
+    const mine = (await db.taskChecks.where('taskId').equals(id).toArray()).filter((c) => !c.deleted);
+    expect(mine.length).toBe(2);
+    expect([...server.keys()].filter((k) => k.startsWith('taskChecks:')).length).toBe(2);
+  });
+
+  it('after updating from an older version, pulls once from the start (older app skipped new tables)', async () => {
+    // eski sürüm: imleç ilerlemiş ama taskChecks kaydını uygulamamış
+    server.set('taskChecks:old', { tbl: 'taskChecks', id: 'old', data: { id: 'old', taskId: 't', at: 1, date: '2026-11-01' }, updated_at: 5, deleted: false, server_ts: ts() });
+    await db.meta.put({ key: 'syncUser', value: 'u1' });
+    await db.meta.put({ key: 'pullCursor', value: '2030-01-01T00:00:00Z' });
+    await db.meta.put({ key: 'syncSchema', value: 1 });
+    await syncNow();
+    expect(await db.taskChecks.get('old')).toBeTruthy();
   });
 });
