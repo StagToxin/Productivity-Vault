@@ -23,6 +23,10 @@ jobs:
           - platform: ubuntu-22.04
             args: ''
     runs-on: ${{ matrix.platform }}
+    # GitHub'ın macOS makineleri sık sık dolu oluyor ("job was not acquired"). macOS düşerse
+    # Windows/Linux sürümü yine yayınlanır; macOS işi sonra "Re-run failed jobs" ile tekrar denenebilir.
+    continue-on-error: ${{ startsWith(matrix.platform, 'macos') }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -71,7 +75,7 @@ jobs:
           releaseName: 'Verim Asistanı ${{ github.ref_name }}'
           releaseBody: |
             ## İndir
-            - **Windows:** `Productivity.Vault_..._x64-setup.exe` dosyasını indir ve çalıştır.
+            - **Windows:** `Verim.Asistani_..._x64-setup.exe` dosyasını indir ve çalıştır.
             - **macOS:** `.dmg` dosyasını indir, uygulamayı Applications klasörüne sürükle.
             - **Linux:** `.AppImage` veya `.deb`.
             - **iPhone / Android:** web adresini aç → "Ana ekrana ekle".
