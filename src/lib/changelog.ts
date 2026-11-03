@@ -9,6 +9,28 @@ export interface ReleaseNote {
 
 export const CHANGELOG: ReleaseNote[] = [
   {
+    version: '1.4.0',
+    date: '2026-11',
+    tr: {
+      added: [
+        '👥 Arkadaşlar: davet koduyla arkadaş ekle (Arkadaşlar sayfası).',
+        '🏆 Liderlik tablosu: bu hafta, bu ay ve 🔥 seri. Başlangıçta kapalı; "Tabloda görün" ile açılır. Sadece adın, lig XP’n ve serin görünür.',
+        '🫂 Ortak alışkanlık: bir alışkanlığını arkadaşlarınla birlikte yap, birbirinizin gününü/saatini ve serisini gör, 👏 tebrik et ya da 👉 dürt. Ayrılınca paylaşılmış günlerin silinir, alışkanlık sende kalır.',
+      ],
+      changed: ['Lig XP’si kasılmaya karşı sınırlı sayılır (Arkadaşlar > "Lig XP’si nasıl hesaplanır?"). Kendi seviyen ve XP’n değişmedi.'],
+      fixed: [],
+    },
+    en: {
+      added: [
+        '👥 Friends: add friends with an invite code (Friends page).',
+        '🏆 Leaderboard: this week, this month and 🔥 streak. Off by default; turn on "Show me". Only your name, league XP and streak are visible.',
+        '🫂 Shared habits: do a habit together, see each other’s days/times and streaks, 👏 cheer or 👉 nudge. Leaving deletes your shared days; the habit stays with you.',
+      ],
+      changed: ['League XP is capped against farming (Friends > "How is league XP counted?"). Your own level and XP are unchanged.'],
+      fixed: [],
+    },
+  },
+  {
     version: '1.3.0',
     date: '2026-11',
     tr: {

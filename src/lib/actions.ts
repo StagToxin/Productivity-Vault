@@ -310,11 +310,11 @@ export async function deleteProject(id: string) {
 }
 
 // ---------- Odak ----------
-export async function logFocus(minutes: number, opts: { habitId?: string; taskId?: string } = {}): Promise<{ id: string; check: CheckResult | null } | null> {
+export async function logFocus(minutes: number, opts: { habitId?: string; taskId?: string; src?: FocusSession['src'] } = {}): Promise<{ id: string; check: CheckResult | null } | null> {
   if (minutes <= 0) return null;
   const id = uid();
   await put<FocusSession>('focus', {
-    id, start: Date.now() - minutes * 60000, minutes, habitId: opts.habitId, taskId: opts.taskId, date: todayKey(),
+    id, start: Date.now() - minutes * 60000, minutes, habitId: opts.habitId, taskId: opts.taskId, date: todayKey(), src: opts.src ?? 'manual',
   });
   if (opts.habitId) await addHabitMinutes(opts.habitId, minutes);
   const check = opts.taskId ? await autoCheckFromFocus(opts.taskId, id) : null;

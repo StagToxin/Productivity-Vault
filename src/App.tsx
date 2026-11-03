@@ -19,8 +19,9 @@ import { CalendarPage, HabitsPage, ProjectsPage, TasksPage } from './pages/Lists
 import SettingsPage from './pages/Settings';
 
 const StatsPage = lazy(() => import('./pages/Stats')); // grafik kütüphanesi ayrı yüklenir
+const FriendsPage = lazy(() => import('./pages/Friends'));
 
-export type Page = 'dashboard' | 'habits' | 'tasks' | 'projects' | 'calendar' | 'focus' | 'stats' | 'settings';
+export type Page = 'dashboard' | 'habits' | 'tasks' | 'projects' | 'calendar' | 'focus' | 'friends' | 'stats' | 'settings';
 const PAGES: { id: Page; icon: string; mobile: boolean }[] = [
   { id: 'dashboard', icon: '🏠', mobile: true },
   { id: 'habits', icon: '📅', mobile: true },
@@ -28,6 +29,7 @@ const PAGES: { id: Page; icon: string; mobile: boolean }[] = [
   { id: 'projects', icon: '🗂', mobile: false },
   { id: 'calendar', icon: '🗓', mobile: false },
   { id: 'focus', icon: '⏱️', mobile: true },
+  { id: 'friends', icon: '👥', mobile: false },
   { id: 'stats', icon: '📈', mobile: false },
   { id: 'settings', icon: '⚙️', mobile: false },
 ];
@@ -88,7 +90,7 @@ export default function App() {
         const focusMin = e.type === 'focusPartial' ? e.min : e.kind === 'focus' ? e.min : 0;
         let extra = '';
         if (focusMin > 0) {
-          const r = await logFocus(focusMin, { habitId: e.habitId, taskId: e.taskId });
+          const r = await logFocus(focusMin, { habitId: e.habitId, taskId: e.taskId, src: e.type === 'focusPartial' ? e.src : 'timer' });
           const xp = Math.floor(focusMin / 5) * XP.focusPer5Min;
           extra = ` +${xp} XP`;
           if (r?.check?.ok) {
@@ -168,6 +170,12 @@ export default function App() {
         return (
           <Suspense fallback={<div className="muted">…</div>}>
             <StatsPage />
+          </Suspense>
+        );
+      case 'friends':
+        return (
+          <Suspense fallback={<div className="muted">…</div>}>
+            <FriendsPage goSettings={() => go('settings')} />
           </Suspense>
         );
       case 'settings':

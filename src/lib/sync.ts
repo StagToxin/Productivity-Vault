@@ -180,6 +180,8 @@ async function syncOnce() {
     await pull();
     await push();
     setStatus({ state: 'idle', lastSync: Date.now() });
+    // ortak alışkanlık tiklerini yayınla (değişiklik yoksa sunucuya gitmez; hata eşitlemeyi bozmaz)
+    void import('./social').then((m) => m.publishShared()).catch(() => {});
   } catch (e) {
     setStatus({ state: 'error', error: e instanceof Error ? e.message : String(e) });
   }

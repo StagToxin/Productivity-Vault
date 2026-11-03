@@ -1,8 +1,10 @@
 import { en13, tr13 } from './i18n13';
+import { en14, tr14 } from './i18n14';
 import type { Lang } from './types';
 
 const tr = {
   ...tr13,
+  ...tr14,
   appName: 'Verim Asistanı',
   nav_dashboard: 'Pano',
   nav_habits: 'Alışkanlıklar',
@@ -313,6 +315,7 @@ type Dict = typeof tr;
 
 const en: Dict = {
   ...en13,
+  ...en14,
   appName: 'Verim Asistanı',
   nav_dashboard: 'Dashboard',
   nav_habits: 'Habits',

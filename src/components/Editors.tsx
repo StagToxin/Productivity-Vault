@@ -169,7 +169,17 @@ function HabitEditor({ id, defaults }: { id?: string; defaults?: Partial<Habit> 
         <div className="actions">
           {cur && (
             <>
-              <button type="button" className="btn danger left" onClick={async () => confirm(t('confirm_delete')) && (await deleteHabit(cur.id), close())}>
+              <button
+                type="button"
+                className="btn danger left"
+                onClick={async () => {
+                  if (!confirm(t('confirm_delete'))) return;
+                  // ortak alışkanlıksa önce gruptan ayrıl (paylaşılmış günler silinsin)
+                  if (cur.share) await import('../lib/social').then((m) => m.leaveGroup(cur.share!.groupId)).catch(() => {});
+                  await deleteHabit(cur.id);
+                  close();
+                }}
+              >
                 {t('delete')}
               </button>
               <button type="button" className="btn" onClick={async () => (await saveHabit({ ...cur, archived: cur.archived ? 0 : 1 }), close())}>

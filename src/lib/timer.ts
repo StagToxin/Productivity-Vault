@@ -9,7 +9,7 @@ export type Mode = 'plan' | 'stopwatch';
 /** Ana pencerenin işleyeceği olaylar (kayıt, bildirim). */
 export type TimerEvent =
   | { id: string; type: 'segEnd'; kind: SegKind; min: number; next: SegKind | null; habitId?: string; taskId?: string }
-  | { id: string; type: 'focusPartial'; min: number; habitId?: string; taskId?: string }
+  | { id: string; type: 'focusPartial'; min: number; habitId?: string; taskId?: string; src: 'timer' | 'stopwatch' }
   | { id: string; type: 'planDone' };
 
 export interface TimerState {
@@ -133,7 +133,7 @@ export const timer = {
     const queue = [...state.queue];
     if (seg.kind === 'focus') {
       const min = Math.floor(elapsedMs() / 60000);
-      if (min > 0) queue.push({ id: evId(), type: 'focusPartial', min, habitId: state.habitId, taskId: state.taskId });
+      if (min > 0) queue.push({ id: evId(), type: 'focusPartial', min, habitId: state.habitId, taskId: state.taskId, src: 'timer' });
     }
     const next = state.idx + 1;
     if (next >= state.segs.length) {
@@ -150,7 +150,7 @@ export const timer = {
     const queue = [...state.queue];
     if (state.active && seg?.kind === 'focus') {
       const min = Math.floor(elapsedMs() / 60000);
-      if (min > 0) queue.push({ id: evId(), type: 'focusPartial', min, habitId: state.habitId, taskId: state.taskId });
+      if (min > 0) queue.push({ id: evId(), type: 'focusPartial', min, habitId: state.habitId, taskId: state.taskId, src: 'timer' });
     }
     set({ ...idlePlan(), queue });
   },
@@ -169,7 +169,7 @@ export const timer = {
     const ms = state.swAcc + (state.swStart ? Date.now() - state.swStart : 0);
     const min = Math.floor(ms / 60000);
     const queue = [...state.queue];
-    if (min > 0) queue.push({ id: evId(), type: 'focusPartial', min, habitId: state.habitId, taskId: state.taskId });
+    if (min > 0) queue.push({ id: evId(), type: 'focusPartial', min, habitId: state.habitId, taskId: state.taskId, src: 'stopwatch' });
     set({ swStart: null, swAcc: 0, queue });
     return min;
   },

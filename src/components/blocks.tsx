@@ -45,6 +45,11 @@ export function HabitCard({ h }: { h: Habit }) {
       <button className="card-title link-title" onClick={() => openEditor({ kind: 'habitDetail', id: h.id })}>
         <span>{h.icon}</span>
         <span className="t">{h.name}</span>
+        {h.share && (
+          <span className="badge accent" title={t('shared_badge')}>
+            👥
+          </span>
+        )}
       </button>
       <div className="meta">
         🎯 {targetLabel(h, t, prefs)}
@@ -169,6 +174,11 @@ export function HabitGridCard({ h, weeks = 9 }: { h: Habit; weeks?: number }) {
       <button className="card-title link-title" onClick={() => openEditor({ kind: 'habitDetail', id: h.id })}>
         <span>{h.icon}</span>
         <span className="t">{h.name}</span>
+        {h.share && (
+          <span className="badge accent" title={t('shared_badge')}>
+            👥
+          </span>
+        )}
       </button>
       <div className={s.doneToday ? 'ok' : 'small muted'} style={s.doneToday ? { color: h.color } : undefined}>
         {s.doneToday ? '✓ ' + t('completed_today') : slotted ? `◐ ${s.todayCount}/${s.todayTotal}` : '○ ' + t('not_completed')}

@@ -17,6 +17,7 @@ Arkadaşın için basit anlatım: **[KURULUM.md](KURULUM.md)**
 - **Bölümlü alışkanlıklar** — günde birkaç kez onaylanan alışkanlıklar (5 vakit namaz, 3 öğün, 8 bardak su, ilaç hazır şablonları); her bölümün planlanan saati ve onaylandığı saat kaydedilir, saatinde bildirim gelir
 - **Geçmiş** — alışkanlık detayında yıl yıl ısı haritası, aylık başarı %, bölüm başına başarı ve ortalama saat, tarih+saatli kayıt listesi; kartlarda geçmiş aylara/haftalara gezinme
 - **Kaçırılanlar** — planlı olup yapılmayan gün/bölüm/haftalar tarih ve planlanan saatleriyle; "Telafi et" ile geç olarak işaretlenir
+- **Arkadaşlar** — davet koduyla eklenir; liderlik tablosu (haftalık / aylık / seri, varsayılan kapalı, yalnızca ad + lig XP + seri görünür); **ortak alışkanlık**: herkes kendi alışkanlığını tutar, yalnızca katıldığı günden beri o alışkanlığın gün/saatleri paylaşılır; ayrılınca silinir. Lig XP'si sunucuda, kasılmaya karşı sınırlı hesaplanır (`supabase/social.sql`)
 - **Hedefli görevler** — "9 Kasım'a kadar 3 kez çalış": her tik ayrı kaydedilir, yüzde + tempo (yolunda/geride/önde); şartlar: günde 1 (takvim günü), her X saatte bir (son tikten itibaren, 1–24 sa), pomodoro şartı (göreve bağlı odak dolunca tik otomatik atılır)
 - **Tekrarlayan görevler ve alt adımlar** — bitince bir sonraki aynı kimlikle oluşturulur (iki cihaz aynısını üretir, çift kayıt olmaz)
 - **Proje detayı** — aktif / biten / yapılamayan görevler, 12 aylık şerit (her ay gün sayısı kadar kutu; çakışan günler koyulaşır veya renklere bölünür), Gantt planı (düzenleme modunda sürükle-bırak), **hızlı plan** (`Literatür 10g`, `Ara rapor !`, `Prototip 3hf x5`, `# Aşama`)
@@ -64,7 +65,8 @@ Depo > **Settings > Pages > Source: GitHub Actions** seç.
 
 ### 2. Supabase (eşitleme)
 1. [supabase.com](https://supabase.com) → ücretsiz proje oluştur (bölge: Frankfurt).
-2. **SQL Editor** → `supabase/schema.sql` içeriğini yapıştır → **Run**.
+2. **SQL Editor** → `supabase/schema.sql` içeriğini yapıştır → **Run**. Ardından aynı şekilde `supabase/social.sql` (arkadaşlar, ortak alışkanlık, liderlik tablosu).
+   > **v1.3'ten güncelliyorsan:** sadece `supabase/social.sql`'i bir kez çalıştır. Çalıştırmazsan uygulama çalışır ama Arkadaşlar sayfası "Sunucu bu sürüme hazır değil" der.
 3. **Authentication > Sign In / Providers > Email**: arkadaşının işini kolaylaştırmak istersen *Confirm email*'i kapat.
 4. **Project Settings > API**'den `Project URL` ve `anon public` key'i al.
 5. GitHub depo > **Settings > Secrets and variables > Actions** → ekle:
@@ -123,6 +125,9 @@ Masaüstünü yerelde denemek: `npm run tauri dev` (Rust + [Tauri önkoşulları
 | `src/lib/reminders.ts`, `platform.ts` | Bildirim, güncelleyici, kurulum |
 | `src/pages/*` | Sayfalar |
 | `supabase/schema.sql` | Sunucu tablosu + RLS + LWW fonksiyonu |
+| `supabase/social.sql` | Arkadaşlık, ortak alışkanlık, liderlik tablosu (RLS + fonksiyonlar, lig XP hesabı) |
+| `supabase/test/` | SQL testleri (yerel PostgreSQL'de gizlilik ve lig kuralları) |
+| `src/lib/social.ts`, `src/pages/Friends.tsx` | Arkadaş özellikleri |
 | `src-tauri/` | Masaüstü kabuğu |
 | `.github/workflows/` | Otomatik yayın |
 

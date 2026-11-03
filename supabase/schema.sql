@@ -1,4 +1,5 @@
 -- Productivity Vault — Supabase şeması
+-- Arkadaşlar / ortak alışkanlık / liderlik tablosu için ayrıca social.sql dosyasını çalıştır (v1.4+).
 -- Supabase panelinde: SQL Editor > New query > bu dosyanın tamamını yapıştır > Run.
 -- Tek bir genel tablo kullanılır: uygulamaya yeni özellik/tablo eklendiğinde SQL değiştirmek gerekmez.
 

@@ -27,6 +27,13 @@ export interface Habit extends SyncFields {
   archived: 0 | 1;
   order: number;
   createdAt: number;
+  share?: HabitShare; // arkadaşlarla ortak alışkanlık bağı
+}
+
+/** Ortak alışkanlık bağı: alışkanlık sende kalır, yalnızca bu gruba katıldığın günden beri tik gün/saatleri paylaşılır. */
+export interface HabitShare {
+  groupId: string;
+  slotMap?: Record<string, string>; // yerel bölüm id → grup bölüm id
 }
 
 // id = `${habitId}_${date}` (bölümlü ise `${habitId}_${date}_${slotId}`)
@@ -107,6 +114,7 @@ export interface FocusSession extends SyncFields {
   habitId?: string;
   taskId?: string;
   date: string;
+  src?: 'timer' | 'stopwatch' | 'manual'; // lig XP'sinde elle eklenen sayılmaz
 }
 
 export type ThemeMode = 'dark' | 'light' | 'system' | 'time';
